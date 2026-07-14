@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -35,13 +36,14 @@ public:
 
     void printErrors() const {
         for (const auto& error : _ec.getErrors()) {
-            std::cerr << "Error: " << error.message;
-            if (error.key.has_value()) {
-                std::cerr << " (key: " << error.key.value() << ")";
-            }
-            if (error.line.has_value()) {
-                std::cerr << " (line: " << error.line.value() << ")";
-            }
+            std::cerr << "Error";
+
+            if (error.line.has_value()) std::cerr << " line " << error.line.value() << ": ";
+            else std::cerr << ": ";
+
+            std::cerr << error.message;
+
+            if (error.key.has_value()) std::cerr << " (key: " << error.key.value() << ")";
             std::cerr << std::endl;
         }
     }
@@ -66,14 +68,14 @@ public:
         }
         lines.push_back(input.substr(start));
 
-        for (const auto& line : lines) {
-            std::string_view trimmed_line = _trim(line);
+        for (size_t i = 0; i < lines.size(); ++i) {
+            std::string_view trimmed_line = _trim(lines[i]);
             if (trimmed_line.empty()) continue;
             if (_allow_comments && trimmed_line[0] == _comment_char) continue;
 
             size_t equal_pos = trimmed_line.find('=');
             if (equal_pos == std::string_view::npos) {
-                result._ec.addError("Missing '=' in line: " + std::string(line));
+                result._ec.addError("Missing '=' in line: " + std::string(lines[i]), std::nullopt, i + 1);
                 continue;
             }
 
