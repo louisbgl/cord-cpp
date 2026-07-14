@@ -33,8 +33,17 @@ public:
         return _ec.hasErrors();
     }
 
-    std::vector<ParseError> getErrors() const {
-        return _ec.getErrors();
+    void printErrors() const {
+        for (const auto& error : _ec.getErrors()) {
+            std::cerr << "Error: " << error.message;
+            if (error.key.has_value()) {
+                std::cerr << " (key: " << error.key.value() << ")";
+            }
+            if (error.line.has_value()) {
+                std::cerr << " (line: " << error.line.value() << ")";
+            }
+            std::cerr << std::endl;
+        }
     }
 
 private:
