@@ -149,24 +149,21 @@ public:
     }
 
     void describe() const {
-        std::cout << "Schema description:" << std::endl;
-        std::cout << "Strict mode: " << (_strict ? "enabled" : "disabled") << std::endl;
-        std::cout << "Allow comments: " << (_allow_comments ? "enabled" : "disabled") << std::endl;
-        std::cout << std::endl;
+        std::cout << "Schema {" << std::endl;
 
         for (const auto& field : _fields) {
             switch (field->getType()) {
                 case FieldType::BOOL:
-                    std::cout << "bool " << field->getName();
+                    std::cout << "  bool " << field->getName();
                     break;
                 case FieldType::INT:
-                    std::cout << "int " << field->getName();
+                    std::cout << "  int " << field->getName();
                     break;
                 case FieldType::DOUBLE:
-                    std::cout << "double " << field->getName();
+                    std::cout << "  double " << field->getName();
                     break;
                 case FieldType::STRING:
-                    std::cout << "string " << field->getName();
+                    std::cout << "  string " << field->getName();
                     break;
             }
 
@@ -180,6 +177,7 @@ public:
 
             std::cout << std::endl;
         }
+        std::cout << "}" << std::endl;
     }
 
     template<typename T>
