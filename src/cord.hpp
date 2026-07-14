@@ -2,7 +2,13 @@
 
 // This is simply an umbrella header
 
-#include "exception.hpp"
-#include "errors.hpp"
-#include "field.hpp"
 #include "schema.hpp"
+
+namespace cord {
+
+// Convenience, also makes linters happy about unused includes
+inline Schema makeSchema() {
+    return Schema();
+}
+
+} // namespace cord
