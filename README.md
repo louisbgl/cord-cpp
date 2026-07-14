@@ -1,4 +1,4 @@
-# cord — Config Reader
+# cord, a Config Reader
 
 Header-only C++ configuration parser with schema validation and fluent API.
 
