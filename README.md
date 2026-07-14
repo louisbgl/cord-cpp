@@ -23,8 +23,8 @@ Header-only C++ configuration parser with schema validation and fluent API.
 
 ## Building
 
-Header-only library. Just include `cord.hpp` in your file!
-You have to copy all hpp file from within `src` to your project.
+Header-only library. Just include `cord.hpp` in your file!   
+You have to copy all hpp file from within `src` to your project tho :)   
 
 ## Quick Start
 
