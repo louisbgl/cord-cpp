@@ -1,6 +1,8 @@
 #pragma once
 
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -135,9 +137,15 @@ public:
     }
 
     Result parseFile(const std::string& filename) {
-        return Result();
-        // TODO: implement file parsing logic
-        // use parse() internally
+        std::ifstream file(filename);
+        if (!file.is_open()) {
+            Result result;
+            result._ec.addError("Failed to open file: " + filename);
+            return result;
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return parse(buffer.str());
     }
 
     void describe() const {
