@@ -1,4 +1,4 @@
-#include "../cord.hpp"
+#include "../src/cord.hpp"
 
 #include <iostream>
 
