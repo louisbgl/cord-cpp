@@ -1,4 +1,9 @@
+#ifdef USE_SINGLE_HEADER
+#include "cord.hpp"
+#else
 #include "../src/cord.hpp"
+#endif
+
 #include <cassert>
 #include <iostream>
 #include <sstream>
@@ -50,10 +55,9 @@ another_unknown = "value"
 
 int main() {
     CORD_MAKE_LINTER_HAPPY();
-    
+
     test_strict_mode_rejects_unknown();
     test_lenient_mode_ignores_unknown();
 
-    std::cout << "\nAll strict mode tests passed!\n";
     return 0;
 }

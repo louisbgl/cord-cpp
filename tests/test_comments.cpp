@@ -1,4 +1,9 @@
+#ifdef USE_SINGLE_HEADER
+#include "cord.hpp"
+#else
 #include "../src/cord.hpp"
+#endif
+
 #include <cassert>
 #include <iostream>
 
@@ -42,10 +47,9 @@ port = 8080
 
 int main() {
     CORD_MAKE_LINTER_HAPPY();
-    
+
     test_comments_enabled();
     test_comments_disabled();
 
-    std::cout << "\nAll comment tests passed!\n";
     return 0;
 }

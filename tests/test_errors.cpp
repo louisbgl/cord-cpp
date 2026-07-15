@@ -1,4 +1,9 @@
+#ifdef USE_SINGLE_HEADER
+#include "cord.hpp"
+#else
 #include "../src/cord.hpp"
+#endif
+
 #include <cassert>
 #include <iostream>
 #include <sstream>
@@ -71,12 +76,11 @@ port = 8080
 
 int main() {
     CORD_MAKE_LINTER_HAPPY();
-    
+
     test_type_mismatch();
     test_malformed_line();
     test_unquoted_string();
     test_duplicate_keys_last_wins();
 
-    std::cout << "\nAll error handling tests passed!\n";
     return 0;
 }

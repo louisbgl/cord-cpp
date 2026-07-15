@@ -1,4 +1,9 @@
+#ifdef USE_SINGLE_HEADER
+#include "cord.hpp"
+#else
 #include "../src/cord.hpp"
+#endif
+
 #include <cassert>
 #include <iostream>
 #include <sstream>
@@ -86,12 +91,11 @@ debug = true
 
 int main() {
     CORD_MAKE_LINTER_HAPPY();
-    
+
     test_basic_types();
     test_defaults();
     test_required_fields();
     test_override_defaults();
 
-    std::cout << "\nAll basic parsing tests passed!\n";
     return 0;
 }

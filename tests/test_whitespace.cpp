@@ -1,4 +1,9 @@
+#ifdef USE_SINGLE_HEADER
+#include "cord.hpp"
+#else
 #include "../src/cord.hpp"
+#endif
+
 #include <cassert>
 #include <iostream>
 
@@ -44,10 +49,9 @@ debug = true
 
 int main() {
     CORD_MAKE_LINTER_HAPPY();
-    
+
     test_whitespace_trimming();
     test_empty_lines();
 
-    std::cout << "\nAll whitespace tests passed!\n";
     return 0;
 }

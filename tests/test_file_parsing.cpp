@@ -1,4 +1,9 @@
+#ifdef USE_SINGLE_HEADER
+#include "cord.hpp"
+#else
 #include "../src/cord.hpp"
+#endif
+
 #include <cassert>
 #include <iostream>
 #include <fstream>
@@ -52,10 +57,9 @@ void test_parse_file_not_found() {
 
 int main() {
     CORD_MAKE_LINTER_HAPPY();
-    
+
     test_parse_file_success();
     test_parse_file_not_found();
 
-    std::cout << "\nAll file parsing tests passed!\n";
     return 0;
 }
