@@ -33,6 +33,7 @@ private:
 enum class FieldType {
     BOOL,
     INT,
+    FLOAT,
     DOUBLE,
     STRING
 };
@@ -43,6 +44,8 @@ constexpr FieldType typeOf() {
         return FieldType::BOOL;
     } else if constexpr (std::is_same_v<T, int>) {
         return FieldType::INT;
+    } else if constexpr (std::is_same_v<T, float>) {
+        return FieldType::FLOAT;
     } else if constexpr (std::is_same_v<T, double>) {
         return FieldType::DOUBLE;
     } else if constexpr (std::is_same_v<T, std::string>) {
@@ -59,10 +62,11 @@ public:
     T as() const {
         static_assert(
             std::is_same_v<T, int> ||
+            std::is_same_v<T, float> ||
             std::is_same_v<T, double> ||
             std::is_same_v<T, bool> ||
             std::is_same_v<T, std::string>,
-            "\n\n[CORD] Unsupported type for Value::as<T>()\n[CORD] Supported types: int, double, bool, std::string\n"
+            "\n\n[CORD] Unsupported type for Value::as<T>()\n[CORD] Supported types: int, float, double, bool, std::string\n"
         );
         return std::get<T>(_value);
     }
@@ -71,8 +75,9 @@ public:
         switch (_value.index()) {
             case 0: return FieldType::BOOL;
             case 1: return FieldType::INT;
-            case 2: return FieldType::DOUBLE;
-            case 3: return FieldType::STRING;
+            case 2: return FieldType::FLOAT;
+            case 3: return FieldType::DOUBLE;
+            case 4: return FieldType::STRING;
             default: throw CordException("Unknown type");
         }
     }
@@ -81,14 +86,15 @@ public:
         switch (_value.index()) {
             case 0: return std::get<bool>(_value) ? "true" : "false";
             case 1: return std::to_string(std::get<int>(_value));
-            case 2: return std::to_string(std::get<double>(_value));
-            case 3: return "\"" + std::get<std::string>(_value) + "\"";
+            case 2: return std::to_string(std::get<float>(_value));
+            case 3: return std::to_string(std::get<double>(_value));
+            case 4: return "\"" + std::get<std::string>(_value) + "\"";
             default: throw CordException("Unknown type");
         }
     }
 
 private:
-    std::variant<bool, int, double, std::string> _value;
+    std::variant<bool, int, float, double, std::string> _value;
 };
 
 class IField {
@@ -285,6 +291,14 @@ public:
                     parsed = tryParseAndStore(&Schema::_tryParseInt);
                     break;
                 }
+                case FieldType::FLOAT: {
+                    auto parsed_double = _tryParseDouble(value_str);
+                    if (parsed_double.has_value()) {
+                        result._values.insert_or_assign(field->getName(), Value(static_cast<float>(*parsed_double)));
+                        parsed = true;
+                    }
+                    break;
+                }
                 case FieldType::DOUBLE: {
                     parsed = tryParseAndStore(&Schema::_tryParseDouble);
                     break;
@@ -336,6 +350,9 @@ public:
                 case FieldType::INT:
                     std::cout << "  int " << field->getName();
                     break;
+                case FieldType::FLOAT:
+                    std::cout << "  float " << field->getName();
+                    break;
                 case FieldType::DOUBLE:
                     std::cout << "  double " << field->getName();
                     break;
@@ -361,10 +378,11 @@ public:
     Field<T>& add(std::string name) {
         static_assert(
             std::is_same_v<T, int> ||
+            std::is_same_v<T, float> ||
             std::is_same_v<T, double> ||
             std::is_same_v<T, bool> ||
             std::is_same_v<T, std::string>,
-            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: int, double, bool, std::string\n"
+            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: int, float, double, bool, std::string\n"
         );
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
