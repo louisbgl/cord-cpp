@@ -36,6 +36,13 @@ public:
 
     template<typename T>
     T as() const {
+        static_assert(
+            std::is_same_v<T, int> ||
+            std::is_same_v<T, double> ||
+            std::is_same_v<T, bool> ||
+            std::is_same_v<T, std::string>,
+            "\n\n[CORD] Unsupported type for Value::as<T>()\n[CORD] Supported types: int, double, bool, std::string\n"
+        );
         return std::get<T>(_value);
     }
 
