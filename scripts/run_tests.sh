@@ -23,6 +23,11 @@ TESTS=(
     "tests/test_file_parsing.cpp"
 )
 
+# Compile-fail tests (should NOT compile)
+COMPILE_FAIL_TESTS=(
+    "tests/test_type_assertions.cpp"
+)
+
 # Create temp build dir
 BUILD_DIR=$(mktemp -d)
 trap "rm -rf $BUILD_DIR" EXIT
@@ -47,6 +52,22 @@ for test in "${TESTS[@]}"; do
     else
         ((FAILED++))
         echo "✗ $testname (compilation failed)"
+    fi
+done
+
+# Test compile-fail tests (should fail to compile)
+for test in "${COMPILE_FAIL_TESTS[@]}"; do
+    testname=$(basename "$test" .cpp)
+
+    # Try to compile (should fail)
+    if $CXX $CXXFLAGS "$test" -o "$BUILD_DIR/$testname" 2>&1 | grep -q "\[CORD\]"; then
+        # Failed to compile with CORD error message = success
+        ((PASSED++))
+        echo "✓ $testname (compile-fail)"
+    else
+        # Compiled successfully or wrong error = failure
+        ((FAILED++))
+        echo "✗ $testname (should not compile)"
     fi
 done
 
