@@ -1,13 +1,17 @@
 #!/bin/bash
 
-set -e
-
-echo "Building and running cord tests..."
-echo
-
 # Compile flags
 CXX="g++"
 CXXFLAGS="-std=c++20 -Wall -Wextra"
+
+# Use single header if USE_SINGLE_HEADER=1
+if [ "$USE_SINGLE_HEADER" = "1" ]; then
+    echo "Using single-header cord.hpp"
+    CXXFLAGS="$CXXFLAGS -DUSE_SINGLE_HEADER -I."
+else
+    echo "Using multi-file src/ headers"
+fi
+echo
 
 # Test files
 TESTS=(
@@ -46,12 +50,10 @@ for test in "${TESTS[@]}"; do
     fi
 done
 
-echo "═══════════════════════════════════════"
-echo "Test Summary"
-echo "═══════════════════════════════════════"
-echo "Passed: $PASSED"
-echo "Failed: $FAILED"
 echo
+echo "═══════════════════════════════════════"
+echo "Passed: $PASSED | Failed: $FAILED"
+echo "═══════════════════════════════════════"
 
 if [ $FAILED -eq 0 ]; then
     echo "✓ All tests passed!"
