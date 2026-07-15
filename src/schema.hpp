@@ -119,6 +119,14 @@ public:
                     parsed = tryParseAndStore(&Schema::_tryParseInt);
                     break;
                 }
+                case FieldType::FLOAT: {
+                    auto parsed_double = _tryParseDouble(value_str);
+                    if (parsed_double.has_value()) {
+                        result._values.insert_or_assign(field->getName(), Value(static_cast<float>(*parsed_double)));
+                        parsed = true;
+                    }
+                    break;
+                }
                 case FieldType::DOUBLE: {
                     parsed = tryParseAndStore(&Schema::_tryParseDouble);
                     break;
@@ -170,6 +178,9 @@ public:
                 case FieldType::INT:
                     std::cout << "  int " << field->getName();
                     break;
+                case FieldType::FLOAT:
+                    std::cout << "  float " << field->getName();
+                    break;
                 case FieldType::DOUBLE:
                     std::cout << "  double " << field->getName();
                     break;
@@ -195,10 +206,11 @@ public:
     Field<T>& add(std::string name) {
         static_assert(
             std::is_same_v<T, int> ||
+            std::is_same_v<T, float> ||
             std::is_same_v<T, double> ||
             std::is_same_v<T, bool> ||
             std::is_same_v<T, std::string>,
-            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: int, double, bool, std::string\n"
+            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: int, float, double, bool, std::string\n"
         );
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
