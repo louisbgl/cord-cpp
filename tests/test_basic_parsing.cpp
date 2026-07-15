@@ -90,8 +90,6 @@ debug = true
 }
 
 int main() {
-    CORD_MAKE_LINTER_HAPPY();
-
     test_basic_types();
     test_defaults();
     test_required_fields();

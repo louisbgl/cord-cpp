@@ -54,8 +54,6 @@ another_unknown = "value"
 }
 
 int main() {
-    CORD_MAKE_LINTER_HAPPY();
-
     test_strict_mode_rejects_unknown();
     test_lenient_mode_ignores_unknown();
 

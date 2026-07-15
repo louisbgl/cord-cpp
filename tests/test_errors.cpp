@@ -75,8 +75,6 @@ port = 8080
 }
 
 int main() {
-    CORD_MAKE_LINTER_HAPPY();
-
     test_type_mismatch();
     test_malformed_line();
     test_unquoted_string();

@@ -48,8 +48,6 @@ debug = true
 }
 
 int main() {
-    CORD_MAKE_LINTER_HAPPY();
-
     test_whitespace_trimming();
     test_empty_lines();
 

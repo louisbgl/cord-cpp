@@ -46,8 +46,6 @@ port = 8080
 }
 
 int main() {
-    CORD_MAKE_LINTER_HAPPY();
-
     test_comments_enabled();
     test_comments_disabled();
 
