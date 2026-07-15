@@ -21,10 +21,9 @@ Header-only C++ configuration parser with schema validation and fluent API.
 - **Comments:** `#` to end of line (when enabled)
 - **Duplicate keys:** Last value wins
 
-## Building
+## Installation
 
-Header-only library. Just include `cord.hpp` in your file!   
-You have to copy all hpp file from within `src` to your project tho :)   
+Single-header library. Download [`cord.hpp`](https://raw.githubusercontent.com/louisbgl/cord-cpp/main/cord.hpp) and include it.
 
 ## Quick Start
 
@@ -128,7 +127,7 @@ std::string host = result.get("host").as<std::string>();
 ## Running Tests
 
 ```bash
-./run_tests.sh
+./scripts/run_tests.sh
 ```
 
 ## License
