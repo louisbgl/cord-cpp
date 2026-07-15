@@ -3,8 +3,6 @@
 #include <iostream>
 
 int main() {
-    CORD_MAKE_LINTER_HAPPY();
-    
     cord::Schema schema;
     schema.setAllowComments(false);
     schema.add<int>("port").required();
