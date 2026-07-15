@@ -99,7 +99,7 @@ public:
             auto tryParseAndStore = [&](auto tryParseFunc) -> bool {
                 auto parsed_value = (this->*tryParseFunc)(value_str);
                 if (parsed_value.has_value()) {
-                    result._values.emplace(field->getName(), Value(*parsed_value));
+                    result._values.insert_or_assign(field->getName(), Value(*parsed_value));
                     return true;
                 }
                 return false;
