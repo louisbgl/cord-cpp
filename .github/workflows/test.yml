@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-multi-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests (multi-file headers)
+        run: ./run_tests.sh
+
+  test-single-header:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate single header
+        run: python3 amalgamate.py
+
+      - name: Run tests (single header)
+        run: USE_SINGLE_HEADER=1 ./run_tests.sh

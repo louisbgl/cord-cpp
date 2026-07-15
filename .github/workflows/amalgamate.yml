@@ -1,0 +1,29 @@
+name: Generate Single Header
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'amalgamate.py'
+
+jobs:
+  amalgamate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate amalgamated header
+        run: python3 amalgamate.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cord.hpp
+          if git diff --staged --quiet; then
+            echo "No changes to cord.hpp"
+          else
+            git commit -m "Update amalgamated cord.hpp [skip ci]"
+            git push
+          fi
