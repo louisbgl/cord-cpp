@@ -21,6 +21,7 @@ TESTS=(
     "tests/test_whitespace.cpp"
     "tests/test_errors.cpp"
     "tests/test_file_parsing.cpp"
+    "tests/test_float_parsing.cpp"
 )
 
 # Compile-fail tests (should NOT compile)
