@@ -2,28 +2,64 @@
 
 Header-only C++ configuration parser with schema validation and fluent API.
 
+## Requirements
+
+C++20 or later. That's it.
+
 ## Features
 
-- **Header-only**, zero dependencies, C++20
-- **Type-safe** schema definition with compile-time checks
-- **Fluent API** for clean, readable schema definitions
-- **Error accumulation** — reports all errors together, not fail-fast
-- **Strict/lenient** parsing modes for unknown keys
-- **Comment support** — optional `#` line comments
+- **Header-only**: zero dependencies
+- **Type-safe**: compile-time checks via `static_assert`
+- **Fluent API**: chain `.required()`, `.default_()`
+- **Error accumulation**: report all errors at once
+- **Strict/lenient modes**: reject or ignore unknown keys
+- **Comment support**: optional `#` line comments
 
 ## Config File Format
 
 - **Format:** `key = value` (one per line)
 - **Whitespace:** Trimmed around keys and values
 - **Strings:** Must be quoted with `""`
-- **Booleans:** `true` or `false` only
-- **Numbers:** `123` (int) or `3.14` (double)
+- **Booleans:** `true` or `false`
+- **Numbers:** `123` (int), `3.14` (float/double)
 - **Comments:** `#` to end of line (when enabled)
 - **Duplicate keys:** Last value wins
 
 ## Installation
 
-Single-header library. Download [`cord.hpp`](https://raw.githubusercontent.com/louisbgl/cord-cpp/main/cord.hpp) and include it.
+cord ships as a single header. You only need `cord.hpp`.
+
+### Option 1: Download the header
+
+Download the header into your project:
+
+```bash
+curl -O https://raw.githubusercontent.com/louisbgl/cord-cpp/main/cord.hpp
+```
+
+Then include it in your code:
+
+```cpp
+#include "cord.hpp"
+```
+
+### Option 2: CMake FetchContent
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(cord
+  GIT_REPOSITORY https://github.com/louisbgl/cord-cpp.git
+  GIT_TAG main)
+FetchContent_MakeAvailable(cord)
+
+target_link_libraries(your_app PRIVATE cord)
+```
+
+Then include in your code:
+
+```cpp
+#include "cord.hpp"
+```
 
 ## Quick Start
 
@@ -122,12 +158,6 @@ std::string host = result.get("host").as<std::string>();
 // Throws CordException if:
 // - Key not found
 // - Type mismatch in as<T>()
-```
-
-## Running Tests
-
-```bash
-./scripts/run_tests.sh
 ```
 
 ## License
