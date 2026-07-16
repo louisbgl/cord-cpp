@@ -305,8 +305,14 @@ public:
                 continue;
             }
 
-            std::string_view key = _trim(trimmed_line.substr(0, equal_pos));
-            std::string_view value_str = _trim(trimmed_line.substr(equal_pos + 1));
+            std::string_view cleaned_line = trimmed_line;
+            if (_allow_comments) {
+                cleaned_line = _removeInlineComment(trimmed_line);
+                cleaned_line = _trim(cleaned_line);
+            }
+
+            std::string_view key = _trim(cleaned_line.substr(0, equal_pos));
+            std::string_view value_str = _trim(cleaned_line.substr(equal_pos + 1));
 
             IField* field = nullptr;
             for (const auto& f : _fields) {
@@ -500,6 +506,18 @@ private:
         size_t end = s.size();
         while (end > start && std::isspace(s[end - 1])) --end;
         return s.substr(start, end - start);
+    }
+
+    std::string_view _removeInlineComment(std::string_view s) const {
+        bool in_quotes = false;
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == '"') {
+                in_quotes = !in_quotes;
+            } else if (s[i] == _comment_char && !in_quotes) {
+                return s.substr(0, i);
+            }
+        }
+        return s;
     }
 
     std::optional<int> _tryParseInt(const std::string_view str) const {
