@@ -5,18 +5,18 @@ on:
     branches: [main]
     paths:
       - 'src/**'
-      - 'scripts/amalgamate.py'
+      - 'scripts/gen_single_header.py'
 
 jobs:
-  amalgamate:
+  generate:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate amalgamated header
-        run: python3 scripts/amalgamate.py
+      - name: Generate single header
+        run: python3 scripts/gen_single_header.py
 
       - name: Commit and push if changed
         run: |
