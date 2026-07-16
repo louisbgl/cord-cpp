@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <cassert>
 
 #include "field.hpp"
 #include "errors.hpp"
@@ -120,15 +121,31 @@ public:
                     break;
                 }
                 case FieldType::FLOAT: {
-                    auto parsed_double = _tryParseDouble(value_str);
-                    if (parsed_double.has_value()) {
-                        result._values.insert_or_assign(field->getName(), Value(static_cast<float>(*parsed_double)));
-                        parsed = true;
-                    }
+                    parsed = tryParseAndStore(&Schema::_tryParseFloat);
                     break;
                 }
                 case FieldType::DOUBLE: {
                     parsed = tryParseAndStore(&Schema::_tryParseDouble);
+                    break;
+                }
+                case FieldType::VECTOR_BOOL: {
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorBool);
+                    break;
+                }
+                case FieldType::VECTOR_INT: {
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorInt);
+                    break;
+                }
+                case FieldType::VECTOR_FLOAT: {
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorFloat);
+                    break;
+                }
+                case FieldType::VECTOR_DOUBLE: {
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorDouble);
+                    break;
+                }
+                case FieldType::VECTOR_STRING: {
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorString);
                     break;
                 }
             }
@@ -187,6 +204,21 @@ public:
                 case FieldType::STRING:
                     std::cout << "  string " << field->getName();
                     break;
+                case FieldType::VECTOR_BOOL:
+                    std::cout << "  vector<bool> " << field->getName();
+                    break;
+                case FieldType::VECTOR_INT:
+                    std::cout << "  vector<int> " << field->getName();
+                    break;
+                case FieldType::VECTOR_FLOAT:
+                    std::cout << "  vector<float> " << field->getName();
+                    break;
+                case FieldType::VECTOR_DOUBLE:
+                    std::cout << "  vector<double> " << field->getName();
+                    break;
+                case FieldType::VECTOR_STRING:
+                    std::cout << "  vector<string> " << field->getName();
+                    break;
             }
 
             if (field->hasDefault()) {
@@ -205,12 +237,17 @@ public:
     template<typename T>
     Field<T>& add(std::string name) {
         static_assert(
+            std::is_same_v<T, bool> ||
             std::is_same_v<T, int> ||
             std::is_same_v<T, float> ||
             std::is_same_v<T, double> ||
-            std::is_same_v<T, bool> ||
-            std::is_same_v<T, std::string>,
-            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: int, float, double, bool, std::string\n"
+            std::is_same_v<T, std::string> ||
+            std::is_same_v<T, std::vector<bool>> ||
+            std::is_same_v<T, std::vector<int>> ||
+            std::is_same_v<T, std::vector<float>> ||
+            std::is_same_v<T, std::vector<double>> ||
+            std::is_same_v<T, std::vector<std::string>>,
+            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: bool, int, float, double, std::string, vector<bool>, vector<int>, vector<float>, vector<double>, vector<std::string>\n"
         );
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
@@ -266,6 +303,12 @@ private:
         }
     }
 
+    std::optional<float> _tryParseFloat(const std::string_view str) const {
+        auto parsed_double = _tryParseDouble(str);
+        if (!parsed_double.has_value()) return std::nullopt;
+        return static_cast<float>(*parsed_double);
+    }
+
     std::optional<bool> _tryParseBool(const std::string_view str) const {
         if (str == "true") return true;
         if (str == "false") return false;
@@ -277,6 +320,106 @@ private:
             return std::string(str.substr(1, str.size() - 2));
         }
         return std::nullopt;
+    }
+
+    std::vector<std::string_view> _splitCommas(std::string_view str) const {
+        std::vector<std::string_view> result;
+        size_t start = 0;
+        while (start < str.size()) {
+            size_t end = str.find(',', start);
+            if (end == std::string_view::npos) end = str.size();
+            std::string_view item = _trim(str.substr(start, end - start));
+            result.push_back(item);
+            start = end + 1;
+        }
+        return result;
+    }
+
+    std::optional<std::vector<std::string_view>> _extractVectorElements(std::string_view str) const {
+        if (str.empty() || str.front() != '[') return std::nullopt;
+
+        size_t close_bracket = str.find(']');
+        if (close_bracket == std::string_view::npos) return std::nullopt;
+
+        std::string_view inner = _trim(str.substr(1, close_bracket - 1));
+        if (inner.empty()) return std::vector<std::string_view>{};
+
+        return _splitCommas(inner);
+    }
+
+    std::optional<std::vector<bool>> _tryParseVectorBool(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<bool>{};
+
+        std::vector<bool> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseBool(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<int>> _tryParseVectorInt(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<int>{};
+
+        std::vector<int> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseInt(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<float>> _tryParseVectorFloat(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<float>{};
+
+        std::vector<float> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseFloat(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<double>> _tryParseVectorDouble(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<double>{};
+
+        std::vector<double> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseDouble(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<std::string>{};
+
+        std::vector<std::string> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseString(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
     }
 };
 

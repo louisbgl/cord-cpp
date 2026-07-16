@@ -22,6 +22,7 @@ C++20 or later. That's it.
 - **Strings:** Must be quoted with `""`
 - **Booleans:** `true` or `false`
 - **Numbers:** `123` (int), `3.14` (float/double)
+- **Vectors:** `[item1, item2, item3]` with square brackets
 - **Comments:** `#` to end of line (when enabled)
 - **Duplicate keys:** Last value wins
 
@@ -109,9 +110,17 @@ cord::Schema schema;
 
 // Add fields with type
 schema.add<int>("name");
+schema.add<float>("name");
 schema.add<double>("name");
 schema.add<bool>("name");
+
+// Also in vector form
 schema.add<std::string>("name");
+schema.add<std::vector<int>>("name");
+schema.add<std::vector<float>>("name");
+schema.add<std::vector<double>>("name");
+schema.add<std::vector<bool>>("name");
+schema.add<std::vector<std::string>>("name");
 
 // Mark as required
 schema.add<int>("port").required();
