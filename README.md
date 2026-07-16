@@ -13,7 +13,7 @@ C++20 or later. That's it.
 - **Fluent API**: chain `.required()`, `.default_()`
 - **Error accumulation**: report all errors at once
 - **Strict/lenient modes**: reject or ignore unknown keys
-- **Comment support**: optional `#` line comments
+- **Comment support**: optional `#` line and inline comments
 
 ## Config File Format
 
@@ -23,7 +23,7 @@ C++20 or later. That's it.
 - **Booleans:** `true` or `false`
 - **Numbers:** `123` (int), `3.14` (float/double)
 - **Vectors:** `[item1, item2, item3]` with square brackets
-- **Comments:** `#` to end of line (when enabled)
+- **Comments:** `#` line or inline comments (when enabled)
 - **Duplicate keys:** Last value wins
 
 ## Installation
