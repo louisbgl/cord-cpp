@@ -417,7 +417,7 @@ private:
         for (const auto& item : elements.value()) {
             auto parsed = _tryParseString(item);
             if (!parsed.has_value()) return std::nullopt;
-            result.push_back(std::string(item));
+            result.push_back(*parsed);
         }
         return result;
     }
