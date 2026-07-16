@@ -13,7 +13,6 @@ C++20 or later. That's it.
 - **Fluent API**: chain `.required()`, `.default_()`
 - **Error accumulation**: report all errors at once
 - **Strict/lenient modes**: reject or ignore unknown keys
-- **Comment support**: optional `#` line and inline comments
 
 ## Config File Format
 
