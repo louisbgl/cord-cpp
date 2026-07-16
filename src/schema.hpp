@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <cassert>
 
 #include "field.hpp"
 #include "errors.hpp"
@@ -131,6 +132,26 @@ public:
                     parsed = tryParseAndStore(&Schema::_tryParseDouble);
                     break;
                 }
+                case FieldType::VECTOR_BOOL: {
+                    assert(false && "Vector<bool> parsing not implemented yet");
+                    break;
+                }
+                case FieldType::VECTOR_INT: {
+                    assert(false && "Vector<int> parsing not implemented yet");
+                    break;
+                }
+                case FieldType::VECTOR_FLOAT: {
+                    assert(false && "Vector<float> parsing not implemented yet");
+                    break;
+                }
+                case FieldType::VECTOR_DOUBLE: {
+                    assert(false && "Vector<double> parsing not implemented yet");
+                    break;
+                }
+                case FieldType::VECTOR_STRING: {
+                    assert(false && "Vector<string> parsing not implemented yet");
+                    break;
+                }
             }
 
             if (!parsed) {
@@ -187,6 +208,21 @@ public:
                 case FieldType::STRING:
                     std::cout << "  string " << field->getName();
                     break;
+                case FieldType::VECTOR_BOOL:
+                    std::cout << "  vector<bool> " << field->getName();
+                    break;
+                case FieldType::VECTOR_INT:
+                    std::cout << "  vector<int> " << field->getName();
+                    break;
+                case FieldType::VECTOR_FLOAT:
+                    std::cout << "  vector<float> " << field->getName();
+                    break;
+                case FieldType::VECTOR_DOUBLE:
+                    std::cout << "  vector<double> " << field->getName();
+                    break;
+                case FieldType::VECTOR_STRING:
+                    std::cout << "  vector<string> " << field->getName();
+                    break;
             }
 
             if (field->hasDefault()) {
@@ -205,12 +241,17 @@ public:
     template<typename T>
     Field<T>& add(std::string name) {
         static_assert(
+            std::is_same_v<T, bool> ||
             std::is_same_v<T, int> ||
             std::is_same_v<T, float> ||
             std::is_same_v<T, double> ||
-            std::is_same_v<T, bool> ||
-            std::is_same_v<T, std::string>,
-            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: int, float, double, bool, std::string\n"
+            std::is_same_v<T, std::string> ||
+            std::is_same_v<T, std::vector<bool>> ||
+            std::is_same_v<T, std::vector<int>> ||
+            std::is_same_v<T, std::vector<float>> ||
+            std::is_same_v<T, std::vector<double>> ||
+            std::is_same_v<T, std::vector<std::string>>,
+            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: bool, int, float, double, std::string, vector<bool>, vector<int>, vector<float>, vector<double>, vector<std::string>\n"
         );
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
