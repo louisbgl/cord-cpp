@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate single header
-        run: python3 scripts/amalgamate.py
+        run: python3 scripts/gen_single_header.py
 
       - name: Run tests (single header)
         run: USE_SINGLE_HEADER=1 ./scripts/run_tests.sh
