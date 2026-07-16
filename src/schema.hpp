@@ -121,11 +121,7 @@ public:
                     break;
                 }
                 case FieldType::FLOAT: {
-                    auto parsed_double = _tryParseDouble(value_str);
-                    if (parsed_double.has_value()) {
-                        result._values.insert_or_assign(field->getName(), Value(static_cast<float>(*parsed_double)));
-                        parsed = true;
-                    }
+                    parsed = tryParseAndStore(&Schema::_tryParseFloat);
                     break;
                 }
                 case FieldType::DOUBLE: {
@@ -133,23 +129,23 @@ public:
                     break;
                 }
                 case FieldType::VECTOR_BOOL: {
-                    assert(false && "Vector<bool> parsing not implemented yet");
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorBool);
                     break;
                 }
                 case FieldType::VECTOR_INT: {
-                    assert(false && "Vector<int> parsing not implemented yet");
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorInt);
                     break;
                 }
                 case FieldType::VECTOR_FLOAT: {
-                    assert(false && "Vector<float> parsing not implemented yet");
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorFloat);
                     break;
                 }
                 case FieldType::VECTOR_DOUBLE: {
-                    assert(false && "Vector<double> parsing not implemented yet");
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorDouble);
                     break;
                 }
                 case FieldType::VECTOR_STRING: {
-                    assert(false && "Vector<string> parsing not implemented yet");
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorString);
                     break;
                 }
             }
@@ -307,6 +303,12 @@ private:
         }
     }
 
+    std::optional<float> _tryParseFloat(const std::string_view str) const {
+        auto parsed_double = _tryParseDouble(str);
+        if (!parsed_double.has_value()) return std::nullopt;
+        return static_cast<float>(*parsed_double);
+    }
+
     std::optional<bool> _tryParseBool(const std::string_view str) const {
         if (str == "true") return true;
         if (str == "false") return false;
@@ -318,6 +320,106 @@ private:
             return std::string(str.substr(1, str.size() - 2));
         }
         return std::nullopt;
+    }
+
+    std::vector<std::string_view> _splitCommas(std::string_view str) const {
+        std::vector<std::string_view> result;
+        size_t start = 0;
+        while (start < str.size()) {
+            size_t end = str.find(',', start);
+            if (end == std::string_view::npos) end = str.size();
+            std::string_view item = _trim(str.substr(start, end - start));
+            result.push_back(item);
+            start = end + 1;
+        }
+        return result;
+    }
+
+    std::optional<std::vector<std::string_view>> _extractVectorElements(std::string_view str) const {
+        if (str.empty() || str.front() != '[') return std::nullopt;
+
+        size_t close_bracket = str.find(']');
+        if (close_bracket == std::string_view::npos) return std::nullopt;
+
+        std::string_view inner = _trim(str.substr(1, close_bracket - 1));
+        if (inner.empty()) return std::vector<std::string_view>{};
+
+        return _splitCommas(inner);
+    }
+
+    std::optional<std::vector<bool>> _tryParseVectorBool(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<bool>{};
+
+        std::vector<bool> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseBool(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<int>> _tryParseVectorInt(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<int>{};
+
+        std::vector<int> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseInt(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<float>> _tryParseVectorFloat(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<float>{};
+
+        std::vector<float> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseFloat(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<double>> _tryParseVectorDouble(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<double>{};
+
+        std::vector<double> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseDouble(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(*parsed);
+        }
+        return result;
+    }
+
+    std::optional<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
+        auto elements = _extractVectorElements(str);
+        if (!elements.has_value()) return std::nullopt;
+
+        if (elements->empty()) return std::vector<std::string>{};
+
+        std::vector<std::string> result;
+        for (const auto& item : elements.value()) {
+            auto parsed = _tryParseString(item);
+            if (!parsed.has_value()) return std::nullopt;
+            result.push_back(std::string(item));
+        }
+        return result;
     }
 };
 
