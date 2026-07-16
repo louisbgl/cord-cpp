@@ -22,6 +22,7 @@ TESTS=(
     "tests/test_errors.cpp"
     "tests/test_file_parsing.cpp"
     "tests/test_float_parsing.cpp"
+    "tests/test_vectors.cpp"
 )
 
 # Compile-fail tests (should NOT compile)
