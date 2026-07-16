@@ -26,6 +26,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to cord.hpp"
           else
-            git commit -m "Update amalgamated cord.hpp [skip ci]"
+            git commit -m "Generate root cord.hpp [skip ci]"
             git push
           fi
