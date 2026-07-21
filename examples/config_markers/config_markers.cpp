@@ -4,7 +4,7 @@
 
 // I recommend peeking at examples/simplest/simplest.cpp first :)
 
-// This example is the same as examples/simplest/simplest.cpp, but with a custom comment marker defined
+// This example is the same as examples/simplest/simplest.cpp, but with a custom comment marker and delimiter
 
 int main() {
     cord::Schema schema;
@@ -13,6 +13,10 @@ int main() {
     // Here we can define our own comment marker, with '#' being the default
     // You can do single chars, as well as multi-char strings, like '//' or '--'
     schema.setCommentMarker("//");
+
+    // And we'll also change the delimiter to '==', with '=' being the default
+    // You could make the delimiter be a space, a ':', or even something crazy like 'is equal to' (tested and works lol)
+    schema.setDelimiter("==");
 
     schema.add<int>("port").required();
     schema.add<std::string>("host").default_("localhost");
