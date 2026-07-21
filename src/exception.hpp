@@ -5,6 +5,9 @@
 
 namespace cord {
 
+/**
+ * @brief Exception class for errors in the cord library.
+ */
 class CordException : public std::exception {
 public:
     explicit CordException(const std::string& message)
