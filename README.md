@@ -31,6 +31,7 @@ Check the [`examples/`](examples/) directory for complete working examples:
 - **[simplest](examples/simplest/)**: Basic usage with primitives
 - **[arrays](examples/arrays/)**: Vector support with `[]` syntax
 - **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
+- **[optionals](examples/optionals)**: Always safe optional fields retrieval
 
 ## Installation
 
@@ -177,6 +178,10 @@ if (result.hasErrors()) {
 // Get and convert value
 int port = result.get("port").as<int>();
 std::string host = result.get("host").as<std::string>();
+
+// Get with safety
+int fallback = 67; // Can be computed at runtime, maybe depends on other config values
+int port = result.get_or("port", fallback).as<int>();
 
 // Throws CordException if:
 // - Key not found
