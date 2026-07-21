@@ -9,6 +9,10 @@ int main() {
     schema.setAllowComments(true); // not necessary, defaults to false
     schema.setStrict(false); // not necessary, defaults to false
 
+    // Note that when you add a field, it's not necesary to have it be required or have a default value
+    // A field can not be both required and have a default, that's weird
+    // A field can be neither required nor have a default, in which case using result.get()
+    // on that field will throw an exception if the field is not present in the config file
     schema.add<int>("port").required();
     schema.add<std::string>("host").default_("localhost");
     schema.add<bool>("debug").default_(false);
