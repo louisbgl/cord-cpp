@@ -10,6 +10,9 @@
 
 namespace cord {
 
+/**
+* @brief Enum representing the supported field types in the schema.
+*/
 enum class FieldType {
     BOOL,
     INT,
@@ -23,6 +26,11 @@ enum class FieldType {
     VECTOR_STRING
 };
 
+/**
+* @brief Helper function to get the FieldType from a C++ type.
+* @tparam T The C++ type for which to get the FieldType.
+* @return The corresponding FieldType.
+*/
 template<typename T>
 constexpr FieldType typeOf() {
     if constexpr (std::is_same_v<T, bool>) {
@@ -50,11 +58,23 @@ constexpr FieldType typeOf() {
     }
 }
 
+/**
+ * @brief Represents a value in the schema, which can be of various types.
+ *
+ * @note Compile-time checks are performed to ensure that only supported types are used.
+ */
 class Value {
 public:
     template<typename T>
     Value(T value) : _value(value) {}
 
+    /**
+     * @brief Converts the value to the specified type.
+     * @tparam T The type to convert to.
+     * @return The converted value.
+     *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
+     */
     template<typename T>
     T as() const {
         static_assert(
@@ -73,6 +93,10 @@ public:
         return std::get<T>(_value);
     }
 
+    /**
+     * @brief Gets the type of the value.
+     * @return The corresponding FieldType.
+     */
     FieldType getType() const {
         switch (_value.index()) {
             case 0: return FieldType::BOOL;
@@ -89,6 +113,10 @@ public:
         }
     }
 
+    /**
+     * @brief Converts the value to a string representation.
+     * @return The string representation of the value.
+     */
     std::string toString() const {
         // lambda to convert vector to string
         auto vectorToString = [](const auto& vec) -> std::string {
@@ -130,6 +158,9 @@ private:
     > _value;
 };
 
+/**
+ * @brief Interface for a field in the schema.
+ */
 class IField {
 public:
     virtual ~IField() = default;
@@ -142,30 +173,42 @@ public:
     virtual bool isRequired() const = 0;
 };
 
+/**
+ * @brief Concrete implementation of a field in the schema.
+ * @tparam T The type of the field.
+ *
+ * @note A field can be marked as required or have a default value, but not both, in which case a CordException is thrown.
+ * @note A field can be neither required nor have a default, in which case trying to get the value is unsafe (in result.get()).
+ */
 template<typename T>
 class Field : public IField {
 public:
     Field(const std::string& name, std::optional<T> default_value = std::nullopt)
         : _name(name), _default_value(default_value) {}
 
+    // Ensures proper field configuration, throws CordException when fails
     void validate() const override {
         if (_required && _default_value.has_value()) {
             throw CordException("Field '" + _name + "' is required and has a default value");
         }
     }
 
+    // Gets the name of the field
     std::string getName() const override {
         return _name;
     }
 
+    // Gets the type of the field
     FieldType getType() const override {
         return typeOf<T>();
     }
 
+    // Checks if the field has a default value
     bool hasDefault() const override {
         return _default_value.has_value();
     }
 
+    // Gets the default value of the field, throws CordException if no default is set
     Value getDefault() const override {
         if (!_default_value.has_value()) {
             throw CordException("Field '" + _name + "' does not have a default value");
@@ -173,15 +216,18 @@ public:
         return Value(_default_value.value());
     }
 
+    // Checks if the field is required
     bool isRequired() const override {
         return _required;
     }
 
+    // Marks the field as required
     Field<T>& required() {
         _required = true;
         return *this;
     }
 
+    // Sets the default value of the field
     Field<T>& default_(T val) {
         _default_value = val;
         return *this;
