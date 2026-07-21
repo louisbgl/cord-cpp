@@ -389,8 +389,8 @@ public:
             if (trimmed_line.empty()) continue;
             if (_allow_comments && trimmed_line.substr(0, _comment_marker.length()) == _comment_marker) continue;
 
-            size_t equal_pos = trimmed_line.find(_delimiter);
-            if (equal_pos == std::string_view::npos) {
+            size_t delimiter_pos = trimmed_line.find(_delimiter);
+            if (delimiter_pos == std::string_view::npos) {
                 result._ec.addError("Missing delimiter (" + std::string(_delimiter) + ") in line: " + std::string(lines[i]), std::nullopt, i + 1);
                 continue;
             }
@@ -401,8 +401,8 @@ public:
                 cleaned_line = _trim(cleaned_line);
             }
 
-            std::string_view key = _trim(cleaned_line.substr(0, equal_pos));
-            std::string_view value_str = _trim(cleaned_line.substr(equal_pos + _delimiter.length()));
+            std::string_view key = _trim(cleaned_line.substr(0, delimiter_pos));
+            std::string_view value_str = _trim(cleaned_line.substr(delimiter_pos + _delimiter.length()));
 
             IField* field = nullptr;
             for (const auto& f : _fields) {
