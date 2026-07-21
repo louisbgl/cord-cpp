@@ -41,7 +41,7 @@ this_has_no_equals
     auto result = schema.parse(config);
     assert(result.hasErrors());
     std::string errors = captureErrors(result);
-    assert(errors.find("'='") != std::string::npos);
+    assert(errors.find("delimiter") != std::string::npos);
 
     std::cout << "✓ test_malformed_line passed\n";
 }
