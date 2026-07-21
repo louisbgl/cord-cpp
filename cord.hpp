@@ -18,6 +18,9 @@
 
 namespace cord {
 
+/**
+ * @brief Exception class for errors in the cord library.
+ */
 class CordException : public std::exception {
 public:
     explicit CordException(const std::string& message)
@@ -31,6 +34,9 @@ private:
     std::string _message;
 };
 
+/**
+* @brief Enum representing the supported field types in the schema.
+*/
 enum class FieldType {
     BOOL,
     INT,
@@ -44,6 +50,11 @@ enum class FieldType {
     VECTOR_STRING
 };
 
+/**
+* @brief Helper function to get the FieldType from a C++ type.
+* @tparam T The C++ type for which to get the FieldType.
+* @return The corresponding FieldType.
+*/
 template<typename T>
 constexpr FieldType typeOf() {
     if constexpr (std::is_same_v<T, bool>) {
@@ -71,11 +82,23 @@ constexpr FieldType typeOf() {
     }
 }
 
+/**
+ * @brief Represents a value in the schema, which can be of various types.
+ *
+ * @note Compile-time checks are performed to ensure that only supported types are used.
+ */
 class Value {
 public:
     template<typename T>
     Value(T value) : _value(value) {}
 
+    /**
+     * @brief Converts the value to the specified type.
+     * @tparam T The type to convert to.
+     * @return The converted value.
+     *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
+     */
     template<typename T>
     T as() const {
         static_assert(
@@ -94,6 +117,11 @@ public:
         return std::get<T>(_value);
     }
 
+    /**
+     * @brief Gets the type of the value.
+     * @return The corresponding FieldType.
+     * @throws CordException if the type is unknown.
+     */
     FieldType getType() const {
         switch (_value.index()) {
             case 0: return FieldType::BOOL;
@@ -110,6 +138,11 @@ public:
         }
     }
 
+    /**
+     * @brief Converts the value to a string representation.
+     * @return The string representation of the value.
+     * @throws CordException if the type is unknown.
+     */
     std::string toString() const {
         // lambda to convert vector to string
         auto vectorToString = [](const auto& vec) -> std::string {
@@ -151,6 +184,9 @@ private:
     > _value;
 };
 
+/**
+ * @brief Interface for a field in the schema.
+ */
 class IField {
 public:
     virtual ~IField() = default;
@@ -163,30 +199,49 @@ public:
     virtual bool isRequired() const = 0;
 };
 
+/**
+ * @brief Concrete implementation of a field in the schema.
+ * @tparam T The type of the field.
+ *
+ * @note A field can be marked as required or have a default value, but not both, in which case a CordException is thrown.
+ * @note A field can be neither required nor have a default, in which case trying to get the value is unsafe (in result.get()).
+ */
 template<typename T>
 class Field : public IField {
 public:
     Field(const std::string& name, std::optional<T> default_value = std::nullopt)
         : _name(name), _default_value(default_value) {}
 
+    /**
+     * @brief Ensures proper field configuration.
+     * @throws CordException if the field is both required and has a default value.
+     */
     void validate() const override {
         if (_required && _default_value.has_value()) {
             throw CordException("Field '" + _name + "' is required and has a default value");
         }
     }
 
+    // Gets the name of the field
     std::string getName() const override {
         return _name;
     }
 
+    // Gets the type of the field
     FieldType getType() const override {
         return typeOf<T>();
     }
 
+    // Checks if the field has a default value
     bool hasDefault() const override {
         return _default_value.has_value();
     }
 
+    /**
+     * @brief Gets the default value of the field.
+     * @return The default value.
+     * @throws CordException if no default is set.
+     */
     Value getDefault() const override {
         if (!_default_value.has_value()) {
             throw CordException("Field '" + _name + "' does not have a default value");
@@ -194,15 +249,18 @@ public:
         return Value(_default_value.value());
     }
 
+    // Checks if the field is required
     bool isRequired() const override {
         return _required;
     }
 
+    // Marks the field as required
     Field<T>& required() {
         _required = true;
         return *this;
     }
 
+    // Sets the default value of the field
     Field<T>& default_(T val) {
         _default_value = val;
         return *this;
@@ -214,26 +272,36 @@ private:
     bool _required = false;
 };
 
+/**
+ * @brief Represents a parsing error with an optional key and line number.
+ */
 struct ParseError {
     std::string message;
     std::optional<std::string> key;
     std::optional<int> line;
 };
 
+/**
+ * @brief Collects and manages parsing errors.
+ */
 class ErrorCollector {
 public:
+    // Adds a parsing error to the collector.
     void addError(const ParseError& error) {
         _errors.push_back(error);
     }
 
+    // Adds a parsing error with a message, optional key, and optional line number.
     void addError(const std::string& message, const std::optional<std::string>& key = std::nullopt, const std::optional<int>& line = std::nullopt) {
         _errors.push_back({message, key, line});
     }
 
+    // Returns the list of collected parsing errors.
     const std::vector<ParseError>& getErrors() const {
         return _errors;
     }
 
+    // Checks if there are any collected parsing errors.
     bool hasErrors() const {
         return !_errors.empty();
     }
@@ -242,11 +310,22 @@ private:
     std::vector<ParseError> _errors;
 };
 
+/**
+ * @brief Represents the result of parsing input.
+ */
 class Result {
 
 friend class Schema;
 
 public:
+    /**
+     * @brief Gets the value associated with a key.
+     * @param key The key to look up.
+     * @return The Value associated with the key.
+     * @throws CordException if the key is not found.
+     *
+     * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
+     */
     Value get(std::string_view key) const {
         auto it = _values.find(std::string(key));
         if (it != _values.end()) {
@@ -256,10 +335,12 @@ public:
         }
     }
 
+    // Checks if there are any parsing errors
     bool hasErrors() const {
         return _ec.hasErrors();
     }
 
+    // Prints all parsing errors to std::cerr
     void printErrors() const {
         for (const auto& error : _ec.getErrors()) {
             std::cerr << "Error";
@@ -279,8 +360,16 @@ private:
     ErrorCollector _ec;
 };
 
+/**
+ * @brief Represents a schema for parsing input.
+ * Is the main workhorse of the library.
+ *
+ * @note Compile-time checks are performed to ensure that only supported types are used.
+ */
 class Schema {
 public:
+    // Parses the input string according to the schema
+    // returns a Result object containing the parsed values and any errors
     Result parse(const std::string_view input) {
         Result result;
 
@@ -339,46 +428,26 @@ public:
 
             bool parsed = false;
             switch (field->getType()) {
-                case FieldType::BOOL: {
-                    parsed = tryParseAndStore(&Schema::_tryParseBool);
-                    break;
-                }
-                case FieldType::STRING: {
-                    parsed = tryParseAndStore(&Schema::_tryParseString);
-                    break;
-                }
-                case FieldType::INT: {
-                    parsed = tryParseAndStore(&Schema::_tryParseInt);
-                    break;
-                }
-                case FieldType::FLOAT: {
-                    parsed = tryParseAndStore(&Schema::_tryParseFloat);
-                    break;
-                }
-                case FieldType::DOUBLE: {
-                    parsed = tryParseAndStore(&Schema::_tryParseDouble);
-                    break;
-                }
-                case FieldType::VECTOR_BOOL: {
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorBool);
-                    break;
-                }
-                case FieldType::VECTOR_INT: {
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorInt);
-                    break;
-                }
-                case FieldType::VECTOR_FLOAT: {
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorFloat);
-                    break;
-                }
-                case FieldType::VECTOR_DOUBLE: {
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorDouble);
-                    break;
-                }
-                case FieldType::VECTOR_STRING: {
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorString);
-                    break;
-                }
+                case FieldType::BOOL:
+                    parsed = tryParseAndStore(&Schema::_tryParseBool); break;
+                case FieldType::STRING:
+                    parsed = tryParseAndStore(&Schema::_tryParseString); break;
+                case FieldType::INT:
+                    parsed = tryParseAndStore(&Schema::_tryParseInt); break;
+                case FieldType::FLOAT:
+                    parsed = tryParseAndStore(&Schema::_tryParseFloat); break;
+                case FieldType::DOUBLE:
+                    parsed = tryParseAndStore(&Schema::_tryParseDouble); break;
+                case FieldType::VECTOR_BOOL:
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorBool); break;
+                case FieldType::VECTOR_INT:
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorInt); break;
+                case FieldType::VECTOR_FLOAT:
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorFloat); break;
+                case FieldType::VECTOR_DOUBLE:
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorDouble); break;
+                case FieldType::VECTOR_STRING:
+                    parsed = tryParseAndStore(&Schema::_tryParseVectorString); break;
             }
 
             if (!parsed) {
@@ -386,23 +455,12 @@ public:
             }
         }
 
-        // ensure all required fields are present
-        for (const auto& field : _fields) {
-            if (field->isRequired() && result._values.find(field->getName()) == result._values.end()) {
-                result._ec.addError("Missing required field: " + field->getName());
-            }
-        }
-
-        // apply default values if needed
-        for (const auto& field : _fields) {
-            if (!field->hasDefault()) continue;
-            if (result._values.find(field->getName()) != result._values.end()) continue;
-            result._values.emplace(field->getName(), field->getDefault());
-        }
-
+        ensureRequiredFieldsPresent(result);
+        applyDefaultValues(result);
         return result;
     }
 
+    // Thin wrapper around parse() for convenience
     Result parseFile(const std::string& filename) {
         std::ifstream file(filename);
         if (!file.is_open()) {
@@ -415,41 +473,32 @@ public:
         return parse(buffer.str());
     }
 
+    // Prints to std::cout a C-style struct representation of the schema
     void describe() const {
         std::cout << "Schema {" << std::endl;
 
         for (const auto& field : _fields) {
             switch (field->getType()) {
                 case FieldType::BOOL:
-                    std::cout << "  bool " << field->getName();
-                    break;
+                    std::cout << "  bool " << field->getName(); break;
                 case FieldType::INT:
-                    std::cout << "  int " << field->getName();
-                    break;
+                    std::cout << "  int " << field->getName(); break;
                 case FieldType::FLOAT:
-                    std::cout << "  float " << field->getName();
-                    break;
+                    std::cout << "  float " << field->getName(); break;
                 case FieldType::DOUBLE:
-                    std::cout << "  double " << field->getName();
-                    break;
+                    std::cout << "  double " << field->getName(); break;
                 case FieldType::STRING:
-                    std::cout << "  string " << field->getName();
-                    break;
+                    std::cout << "  string " << field->getName(); break;
                 case FieldType::VECTOR_BOOL:
-                    std::cout << "  vector<bool> " << field->getName();
-                    break;
+                    std::cout << "  vector<bool> " << field->getName(); break;
                 case FieldType::VECTOR_INT:
-                    std::cout << "  vector<int> " << field->getName();
-                    break;
+                    std::cout << "  vector<int> " << field->getName(); break;
                 case FieldType::VECTOR_FLOAT:
-                    std::cout << "  vector<float> " << field->getName();
-                    break;
+                    std::cout << "  vector<float> " << field->getName(); break;
                 case FieldType::VECTOR_DOUBLE:
-                    std::cout << "  vector<double> " << field->getName();
-                    break;
+                    std::cout << "  vector<double> " << field->getName(); break;
                 case FieldType::VECTOR_STRING:
-                    std::cout << "  vector<string> " << field->getName();
-                    break;
+                    std::cout << "  vector<string> " << field->getName(); break;
             }
 
             if (field->hasDefault()) {
@@ -465,6 +514,14 @@ public:
         std::cout << "}" << std::endl;
     }
 
+    /**
+     * @brief Adds a field to the schema
+     * @tparam T The type of the field
+     * @param name The name of the field
+     * @return A reference to the added field
+     *
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
     template<typename T>
     Field<T>& add(std::string name) {
         static_assert(
@@ -486,10 +543,14 @@ public:
         return ptr;
     }
 
+    // Sets the schema to strict mode, where unknown keys will result in errors
+    // Defaults to false
     void setStrict(bool strict) {
         _strict = strict;
     }
 
+    // Sets whether comments are allowed in the input
+    // Defaults to true
     void setAllowComments(bool allow) {
         _allow_comments = allow;
     }
@@ -497,8 +558,26 @@ public:
 private:
     std::vector<std::unique_ptr<IField>> _fields;
     bool _strict = false;
-    bool _allow_comments = false;
+    bool _allow_comments = true;
     const char _comment_char = '#';
+
+    void ensureRequiredFieldsPresent(Result& result) const {
+        for (const auto& field : _fields) {
+            std::string name = field->getName();
+            if (field->isRequired() && result._values.find(name) == result._values.end()) {
+                result._ec.addError("Missing required field: " + name);
+            }
+        }
+    }
+
+    void applyDefaultValues(Result& result) const {
+        for (const auto& field : _fields) {
+            std::string name = field->getName();
+            if (!field->hasDefault()) continue;
+            if (result._values.find(name) != result._values.end()) continue;
+            result._values.emplace(name, field->getDefault());
+        }
+    }
 
     std::string_view _trim(std::string_view s) const {
         size_t start = 0;
