@@ -24,6 +24,7 @@ TESTS=(
     "tests/test_float_parsing.cpp"
     "tests/test_vectors.cpp"
     "tests/test_inline_comments.cpp"
+    "tests/test_custom_markers.cpp"
 )
 
 # Compile-fail tests (should NOT compile)
