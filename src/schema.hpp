@@ -25,8 +25,14 @@ class Result {
 friend class Schema;
 
 public:
-    // Gets the value associated with a key, throws CordException if the key is not found
-    // Recommended to chain with .as<T>() to get the value as the expected type with a one-liner
+    /**
+     * @brief Gets the value associated with a key.
+     * @param key The key to look up.
+     * @return The Value associated with the key.
+     * @throws CordException if the key is not found.
+     *
+     * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
+     */
     Value get(std::string_view key) const {
         auto it = _values.find(std::string(key));
         if (it != _values.end()) {

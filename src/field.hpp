@@ -96,6 +96,7 @@ public:
     /**
      * @brief Gets the type of the value.
      * @return The corresponding FieldType.
+     * @throws CordException if the type is unknown.
      */
     FieldType getType() const {
         switch (_value.index()) {
@@ -116,6 +117,7 @@ public:
     /**
      * @brief Converts the value to a string representation.
      * @return The string representation of the value.
+     * @throws CordException if the type is unknown.
      */
     std::string toString() const {
         // lambda to convert vector to string
@@ -186,7 +188,10 @@ public:
     Field(const std::string& name, std::optional<T> default_value = std::nullopt)
         : _name(name), _default_value(default_value) {}
 
-    // Ensures proper field configuration, throws CordException when fails
+    /**
+     * @brief Ensures proper field configuration.
+     * @throws CordException if the field is both required and has a default value.
+     */
     void validate() const override {
         if (_required && _default_value.has_value()) {
             throw CordException("Field '" + _name + "' is required and has a default value");
@@ -208,7 +213,11 @@ public:
         return _default_value.has_value();
     }
 
-    // Gets the default value of the field, throws CordException if no default is set
+    /**
+     * @brief Gets the default value of the field.
+     * @return The default value.
+     * @throws CordException if no default is set.
+     */
     Value getDefault() const override {
         if (!_default_value.has_value()) {
             throw CordException("Field '" + _name + "' does not have a default value");
