@@ -96,9 +96,9 @@ public:
             if (trimmed_line.empty()) continue;
             if (_allow_comments && trimmed_line.substr(0, _comment_marker.length()) == _comment_marker) continue;
 
-            size_t equal_pos = trimmed_line.find('=');
-            if (equal_pos == std::string_view::npos) {
-                result._ec.addError("Missing '=' in line: " + std::string(lines[i]), std::nullopt, i + 1);
+            size_t delimiter_pos = trimmed_line.find(_delimiter);
+            if (delimiter_pos == std::string_view::npos) {
+                result._ec.addError("Missing delimiter (" + std::string(_delimiter) + ") in line: " + std::string(lines[i]), std::nullopt, i + 1);
                 continue;
             }
 
@@ -108,8 +108,8 @@ public:
                 cleaned_line = _trim(cleaned_line);
             }
 
-            std::string_view key = _trim(cleaned_line.substr(0, equal_pos));
-            std::string_view value_str = _trim(cleaned_line.substr(equal_pos + 1));
+            std::string_view key = _trim(cleaned_line.substr(0, delimiter_pos));
+            std::string_view value_str = _trim(cleaned_line.substr(delimiter_pos + _delimiter.length()));
 
             IField* field = nullptr;
             for (const auto& f : _fields) {
@@ -263,8 +263,27 @@ public:
         _allow_comments = allow;
     }
 
+    // Sets the delimiter for key-value pairs, '=' is the default
+    void setDelimiter(const char delimiter) {
+        _delimiter = delimiter;
+    }
+
+    /**
+     * @brief Sets the delimiter for key-value pairs.
+     * @param delimiter The delimiter.
+     * @throws CordException if the delimiter is empty.
+     *
+     * @note "=" is the default.
+     */
+    void setDelimiter(const std::string& delimiter) {
+        if (delimiter.empty()) {
+            throw CordException("Delimiter cannot be empty");
+        }
+        _delimiter = delimiter;
+    }
+
     // Sets the comment marker for comments, '#' is the default
-    void setCommentMarker(char marker) {
+    void setCommentMarker(const char marker) {
         _comment_marker = marker;
     }
 
@@ -286,6 +305,7 @@ private:
     std::vector<std::unique_ptr<IField>> _fields;
     bool _strict = false;
     bool _allow_comments = true;
+    std::string _delimiter = "=";
     std::string _comment_marker = "#";
 
     void ensureRequiredFieldsPresent(Result& result) const {
