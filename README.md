@@ -25,6 +25,13 @@ C++20 or later. That's it.
 - **Comments:** `#` line or inline comments (when enabled)
 - **Duplicate keys:** Last value wins
 
+## Examples
+
+Check the [`examples/`](examples/) directory for complete working examples:
+- **[simplest](examples/simplest/)**: Basic usage with primitives
+- **[arrays](examples/arrays/)**: Vector support with `[]` syntax
+- **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
+
 ## Installation
 
 cord ships as a single header. You only need `cord.hpp`.
@@ -132,6 +139,14 @@ schema.setAllowComments(true);
 
 // Strict mode (reject unknown keys)
 schema.setStrict(true);
+
+// Customize delimiter (default: "=")
+schema.setDelimiter(":");   // or multi-char like "=="
+schema.setDelimiter(':');   // or single char
+
+// Customize comment marker (default: "#")
+schema.setCommentMarker("//");  // or multi-char like "--"
+schema.setCommentMarker(';');   // or single char
 
 // Debug: print schema structure
 schema.describe();
