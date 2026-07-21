@@ -6,7 +6,7 @@ int main() {
     // A Schema is the representation of expected values in a config file
     cord::Schema schema;
 
-    schema.setAllowComments(true); // not necessary, defaults to false
+    schema.setAllowComments(true); // not necessary, defaults to true
     schema.setStrict(false); // not necessary, defaults to false
 
     // Note that when you add a field, it's not necesary to have it be required or have a default value
