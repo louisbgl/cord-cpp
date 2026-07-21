@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -93,7 +94,7 @@ public:
         for (size_t i = 0; i < lines.size(); ++i) {
             std::string_view trimmed_line = _trim(lines[i]);
             if (trimmed_line.empty()) continue;
-            if (_allow_comments && trimmed_line[0] == _comment_char) continue;
+            if (_allow_comments && trimmed_line.substr(0, _comment_marker.length()) == _comment_marker) continue;
 
             size_t equal_pos = trimmed_line.find('=');
             if (equal_pos == std::string_view::npos) {
@@ -262,11 +263,28 @@ public:
         _allow_comments = allow;
     }
 
+    // Sets the comment marker for comments
+    void setCommentMarker(char marker) {
+        _comment_marker = marker;
+    }
+
+    /**
+     * @brief Sets the comment marker for comments.
+     * @param marker The comment marker.
+     * @throws CordException if the marker is empty.
+     */
+    void setCommentMarker(const std::string& marker) {
+        if (marker.empty()) {
+            throw CordException("Comment marker cannot be empty");
+        }
+        _comment_marker = marker;
+    }
+
 private:
     std::vector<std::unique_ptr<IField>> _fields;
     bool _strict = false;
     bool _allow_comments = true;
-    const char _comment_char = '#';
+    std::string _comment_marker = "#";
 
     void ensureRequiredFieldsPresent(Result& result) const {
         for (const auto& field : _fields) {
@@ -299,7 +317,7 @@ private:
         for (size_t i = 0; i < s.size(); ++i) {
             if (s[i] == '"') {
                 in_quotes = !in_quotes;
-            } else if (s[i] == _comment_char && !in_quotes) {
+            } else if (s.substr(i, _comment_marker.length()) == _comment_marker && !in_quotes) {
                 return s.substr(0, i);
             }
         }
