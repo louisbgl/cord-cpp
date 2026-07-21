@@ -7,6 +7,7 @@
 // I'll note here that we only support arrays of primitives, meaning no arrays of arrays
 // This is type checked at compile time
 // All user-facing methods that are templated do compile time checks on the types passed in for safety
+// Namely, schema.add<T>() and Value.as<T>() do these checks
 
 int main() {
     cord::Schema schema;
