@@ -18,7 +18,7 @@ int main() {
     schema.add<bool>("debug").default_(false);
 
     // Describe here is mainly to visualize the schema as a c-style struct
-    // useful for debugging or visualizing the schema
+    // Useful for debugging or visualizing the schema
     schema.describe();
     std::cout << std::endl;
 
@@ -30,6 +30,11 @@ int main() {
     if (result.hasErrors()) result.printErrors();
     else {
         std::cout << "Parsed values:" << std::endl;
+
+        // When getting values from the result, it's advised to chain result.get() with .as<T>() to get the value as the expected type
+        // result.get() can throw if the key is not present in the result
+        // .as<T>() can throw if the value is not of the expected type
+        // .as<T>() is nice because it makes the type gotten clear and safe
         std::cout << "port: " << result.get("port").as<int>()                         << std::endl;
         std::cout << "host: " << result.get("host").as<std::string>()                 << std::endl;
         std::cout << "debug: " << (result.get("debug").as<bool>() ? "true" : "false") << std::endl;
