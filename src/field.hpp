@@ -6,6 +6,7 @@
 #include <optional>
 #include <type_traits>
 
+#include "common.hpp"
 #include "exception.hpp"
 
 namespace cord {
@@ -77,19 +78,7 @@ public:
      */
     template<typename T>
     T as() const {
-        static_assert(
-            std::is_same_v<T, bool> ||
-            std::is_same_v<T, int> ||
-            std::is_same_v<T, float> ||
-            std::is_same_v<T, double> ||
-            std::is_same_v<T, std::string> ||
-            std::is_same_v<T, std::vector<bool>> ||
-            std::is_same_v<T, std::vector<int>> ||
-            std::is_same_v<T, std::vector<float>> ||
-            std::is_same_v<T, std::vector<double>> ||
-            std::is_same_v<T, std::vector<std::string>>,
-            "\n\n[CORD] Unsupported type for Value::as<T>()\n[CORD] Supported types: bool, int, float, double, std::string, std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
-        );
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         return std::get<T>(_value);
     }
 

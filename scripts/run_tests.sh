@@ -25,11 +25,13 @@ TESTS=(
     "tests/test_vectors.cpp"
     "tests/test_inline_comments.cpp"
     "tests/test_custom_markers.cpp"
+    "tests/test_get_or.cpp"
 )
 
 # Compile-fail tests (should NOT compile)
 COMPILE_FAIL_TESTS=(
     "tests/test_type_assertions.cpp"
+    "tests/test_get_or_type_safety.cpp"
 )
 
 # Create temp build dir

@@ -17,7 +17,50 @@
 #include <variant>
 #include <vector>
 
+// Error message macro for static_assert failures on unsupported types
+#define CORD_UNSUPPORTED_TYPE(context) \
+    "\n\n[CORD] Unsupported type for " context "\n" \
+    "[CORD] Supported types: bool, int, float, double, std::string, " \
+    "std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
+
 namespace cord {
+
+/**
+ * Type trait to check if T is a supported cord type.
+ * Supported types: bool, int, float, double, std::string, and vectors of these types.
+ * Also supports const char* and char* for convenience in get_or().
+ */
+template<typename T>
+constexpr bool is_supported_type_v =
+    std::is_same_v<T, bool> ||
+    std::is_same_v<T, int> ||
+    std::is_same_v<T, float> ||
+    std::is_same_v<T, double> ||
+    std::is_same_v<T, std::string> ||
+    std::is_same_v<T, const char*> ||
+    std::is_same_v<T, char*> ||
+    std::is_same_v<T, std::vector<bool>> ||
+    std::is_same_v<T, std::vector<int>> ||
+    std::is_same_v<T, std::vector<float>> ||
+    std::is_same_v<T, std::vector<double>> ||
+    std::is_same_v<T, std::vector<std::string>>;
+
+/**
+ * Type trait to check if T is a supported cord type (excluding char* types).
+ * Used for schema.add<T>() and Value::as<T>() which don't support raw pointers.
+ */
+template<typename T>
+constexpr bool is_supported_value_type_v =
+    std::is_same_v<T, bool> ||
+    std::is_same_v<T, int> ||
+    std::is_same_v<T, float> ||
+    std::is_same_v<T, double> ||
+    std::is_same_v<T, std::string> ||
+    std::is_same_v<T, std::vector<bool>> ||
+    std::is_same_v<T, std::vector<int>> ||
+    std::is_same_v<T, std::vector<float>> ||
+    std::is_same_v<T, std::vector<double>> ||
+    std::is_same_v<T, std::vector<std::string>>;
 
 /**
  * @brief Exception class for errors in the cord library.
@@ -102,19 +145,7 @@ public:
      */
     template<typename T>
     T as() const {
-        static_assert(
-            std::is_same_v<T, bool> ||
-            std::is_same_v<T, int> ||
-            std::is_same_v<T, float> ||
-            std::is_same_v<T, double> ||
-            std::is_same_v<T, std::string> ||
-            std::is_same_v<T, std::vector<bool>> ||
-            std::is_same_v<T, std::vector<int>> ||
-            std::is_same_v<T, std::vector<float>> ||
-            std::is_same_v<T, std::vector<double>> ||
-            std::is_same_v<T, std::vector<std::string>>,
-            "\n\n[CORD] Unsupported type for Value::as<T>()\n[CORD] Supported types: bool, int, float, double, std::string, std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
-        );
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         return std::get<T>(_value);
     }
 
@@ -336,6 +367,25 @@ public:
         }
     }
 
+    /**
+     * @brief Gets the value associated with a key or returns a fallback value.
+     * @param key The key to look up.
+     * @param fallback The fallback value to return if the key is not found.
+     * @return The Value associated with the key or the fallback value.
+     *
+     * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
+    template<typename T>
+    Value get_or(std::string_view key, T fallback) const {
+        static_assert(is_supported_type_v<T>, CORD_UNSUPPORTED_TYPE("result.get_or<T>()"));
+        auto it = _values.find(std::string(key));
+        if (it != _values.end()) {
+            return it->second;
+        }
+        return Value(fallback);
+    }
+
     // Checks if there are any parsing errors
     bool hasErrors() const {
         return _ec.hasErrors();
@@ -525,19 +575,7 @@ public:
      */
     template<typename T>
     Field<T>& add(std::string name) {
-        static_assert(
-            std::is_same_v<T, bool> ||
-            std::is_same_v<T, int> ||
-            std::is_same_v<T, float> ||
-            std::is_same_v<T, double> ||
-            std::is_same_v<T, std::string> ||
-            std::is_same_v<T, std::vector<bool>> ||
-            std::is_same_v<T, std::vector<int>> ||
-            std::is_same_v<T, std::vector<float>> ||
-            std::is_same_v<T, std::vector<double>> ||
-            std::is_same_v<T, std::vector<std::string>>,
-            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: bool, int, float, double, std::string, vector<bool>, vector<int>, vector<float>, vector<double>, vector<std::string>\n"
-        );
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<T>()"));
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
         _fields.push_back(std::move(field));

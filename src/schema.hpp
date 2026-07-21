@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <cassert>
 
+#include "common.hpp"
 #include "field.hpp"
 #include "errors.hpp"
 #include "exception.hpp"
@@ -41,6 +42,25 @@ public:
         } else {
             throw CordException("Key not found: " + std::string(key));
         }
+    }
+
+    /**
+     * @brief Gets the value associated with a key or returns a fallback value.
+     * @param key The key to look up.
+     * @param fallback The fallback value to return if the key is not found.
+     * @return The Value associated with the key or the fallback value.
+     *
+     * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
+    template<typename T>
+    Value get_or(std::string_view key, T fallback) const {
+        static_assert(is_supported_type_v<T>, CORD_UNSUPPORTED_TYPE("result.get_or<T>()"));
+        auto it = _values.find(std::string(key));
+        if (it != _values.end()) {
+            return it->second;
+        }
+        return Value(fallback);
     }
 
     // Checks if there are any parsing errors
@@ -232,19 +252,7 @@ public:
      */
     template<typename T>
     Field<T>& add(std::string name) {
-        static_assert(
-            std::is_same_v<T, bool> ||
-            std::is_same_v<T, int> ||
-            std::is_same_v<T, float> ||
-            std::is_same_v<T, double> ||
-            std::is_same_v<T, std::string> ||
-            std::is_same_v<T, std::vector<bool>> ||
-            std::is_same_v<T, std::vector<int>> ||
-            std::is_same_v<T, std::vector<float>> ||
-            std::is_same_v<T, std::vector<double>> ||
-            std::is_same_v<T, std::vector<std::string>>,
-            "\n\n[CORD] Unsupported type for schema.add<T>()\n[CORD] Supported types: bool, int, float, double, std::string, vector<bool>, vector<int>, vector<float>, vector<double>, vector<std::string>\n"
-        );
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<T>()"));
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
         _fields.push_back(std::move(field));

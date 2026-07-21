@@ -7,6 +7,7 @@ def amalgamate(src_dir, output_file):
 
     # Order matters - dependencies first
     files = [
+        'common.hpp',
         'exception.hpp',
         'field.hpp',
         'errors.hpp',
@@ -29,7 +30,46 @@ def amalgamate(src_dir, output_file):
                     system_includes.add(line)
 
     output_lines.extend(sorted(system_includes))
-    output_lines.append('\nnamespace cord {\n')
+    output_lines.append('\n')
+
+    # Collect macros with preceding comments (before namespace)
+    macro_lines = []
+    for file in files:
+        path = Path(src_dir) / file
+        with open(path) as f:
+            lines = f.readlines()
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if line.startswith('#define'):
+                # Collect preceding comment if exists
+                comment_start = i
+                if i > 0 and lines[i-1].strip().startswith('//'):
+                    comment_start = i - 1
+
+                # Add comment + macro
+                for j in range(comment_start, i):
+                    macro_lines.append(lines[j])
+
+                # Collect multi-line macro
+                macro_text = line
+                if line.rstrip().endswith('\\'):
+                    i += 1
+                    while i < len(lines) and lines[i-1].rstrip().endswith('\\'):
+                        macro_text += lines[i]
+                        i += 1
+                    i -= 1
+                macro_lines.append(macro_text)
+            i += 1
+
+    # Add macros before namespace
+    if macro_lines:
+        for macro in macro_lines:
+            output_lines.append(macro)
+        output_lines.append('\n')
+
+    output_lines.append('namespace cord {\n')
 
     # Process each file - extract content inside namespace
     for file in files:
@@ -40,13 +80,25 @@ def amalgamate(src_dir, output_file):
 
         in_namespace = False
         content_lines = []
+        skip_until_newline = False
 
-        for line in lines:
+        for i, line in enumerate(lines):
             # Skip pragma once
             if line.strip() == '#pragma once':
                 continue
             # Skip includes
             if line.startswith('#include'):
+                continue
+            # Skip comments before macros (already handled with macros)
+            if i < len(lines) - 1 and lines[i+1].startswith('#define') and line.strip().startswith('//'):
+                continue
+            # Skip macros (already handled)
+            if line.startswith('#define'):
+                skip_until_newline = True
+                continue
+            if skip_until_newline:
+                if not line.rstrip().endswith('\\'):
+                    skip_until_newline = False
                 continue
             # Skip namespace declarations
             if line.strip().startswith('namespace cord'):
