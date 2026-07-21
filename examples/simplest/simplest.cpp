@@ -6,8 +6,8 @@ int main() {
     // A Schema is the representation of expected values in a config file
     cord::Schema schema;
 
-    schema.setAllowComments(true); // not necessary, defaults to true anyways
-    schema.setStrict(false); // not necessary, defaults to false anyways
+    schema.setAllowComments(true); // not necessary, defaults to false
+    schema.setStrict(false); // not necessary, defaults to false
 
     schema.add<int>("port").required();
     schema.add<std::string>("host").default_("localhost");
