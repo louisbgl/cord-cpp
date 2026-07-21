@@ -22,8 +22,6 @@ int main() {
         // Useful if a config value isnt required but depends on another value in the config file
         int port = result.get_or("port", env == "prod" ? 443 : 8080).as<int>();
 
-        size_t wtf = result.get_or("wtf", (size_t)42).as<int>();
-
         std::cout << "port: " << port << std::endl;
         std::cout << "env: "  << env  << std::endl;
         }
