@@ -263,7 +263,7 @@ public:
         _allow_comments = allow;
     }
 
-    // Sets the comment marker for comments
+    // Sets the comment marker for comments, '#' is the default
     void setCommentMarker(char marker) {
         _comment_marker = marker;
     }
@@ -272,6 +272,8 @@ public:
      * @brief Sets the comment marker for comments.
      * @param marker The comment marker.
      * @throws CordException if the marker is empty.
+     *
+     * @note "#" is the default.
      */
     void setCommentMarker(const std::string& marker) {
         if (marker.empty()) {
