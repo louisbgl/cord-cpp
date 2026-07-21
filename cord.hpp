@@ -25,11 +25,8 @@
 
 namespace cord {
 
-/**
- * Type trait to check if T is a supported cord type.
- * Supported types: bool, int, float, double, std::string, and vectors of these types.
- * Also supports const char* and char* for convenience in get_or().
- */
+// Type trait to check if T is a supported cord type
+// Also supports const char* and char* for convenience in result.get_or()
 template<typename T>
 constexpr bool is_supported_type_v =
     std::is_same_v<T, bool> ||
@@ -45,10 +42,7 @@ constexpr bool is_supported_type_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
-/**
- * Type trait to check if T is a supported cord type (excluding char* types).
- * Used for schema.add<T>() and Value::as<T>() which don't support raw pointers.
- */
+// Type trait to check if T is a supported cord type
 template<typename T>
 constexpr bool is_supported_value_type_v =
     std::is_same_v<T, bool> ||
