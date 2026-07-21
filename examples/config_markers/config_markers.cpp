@@ -4,7 +4,7 @@
 
 // I recommend peeking at examples/simplest/simplest.cpp first :)
 
-// This example is th same as examples/simplest/simplest.cpp, but with a custom comment marker defined
+// This example is the same as examples/simplest/simplest.cpp, but with a custom comment marker defined
 
 int main() {
     cord::Schema schema;
@@ -12,7 +12,7 @@ int main() {
 
     // Here we can define our own comment marker, with '#' being the default
     // You can do single chars, as well as multi-char strings, like '//' or '--'
-    schema.setCommentMarker("--");
+    schema.setCommentMarker("//");
 
     schema.add<int>("port").required();
     schema.add<std::string>("host").default_("localhost");
