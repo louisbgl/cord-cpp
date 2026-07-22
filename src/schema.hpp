@@ -35,7 +35,7 @@ public:
      *
      * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
      */
-    Value get(std::string_view key) const {
+    const Value& get(std::string_view key) const {
         auto it = _values.find(std::string(key));
         if (it != _values.end()) {
             return it->second;
