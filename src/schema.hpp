@@ -96,8 +96,12 @@ private:
  */
 class Schema {
 public:
-    // Parses the input string according to the schema
-    // returns a Result object containing the parsed values and any errors
+    /**
+     * @brief Parses the input string according to the schema.
+     * @param input The input string to parse.
+     * @return A Result object containing the parsed values and any errors.
+     * @throws CordException if the schema is not properly configured.
+     */
     Result parse(const std::string_view input) {
         Result result;
 
