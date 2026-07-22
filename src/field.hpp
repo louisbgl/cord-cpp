@@ -183,7 +183,7 @@ public:
      */
     void validate() const override {
         if (_required && _default_value.has_value()) {
-            throw CordException("Field '" + _name + "' is required and has a default value");
+            throw CordException("Field '" + _name + "' can't be both required and have a default value");
         }
     }
 

@@ -185,6 +185,9 @@ public:
 
         ensureRequiredFieldsPresent(result);
         applyDefaultValues(result);
+        for (const auto& field : _fields) {
+            field->validate();
+        }
         return result;
     }
 
