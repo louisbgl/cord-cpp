@@ -33,3 +33,7 @@ Makefile
 # Test outputs
 *.log
 test_output/
+
+# Markdown (keep only README)
+*.md
+!README.md
