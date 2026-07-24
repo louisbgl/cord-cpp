@@ -5,7 +5,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(cord INTERFACE)
-target_include_directories(cord INTERFACE ${CMAKE_SOURCE_DIR}/src)
+
+option(CORD_SINGLE_HEADER "Test against generated root cord.hpp instead of src/" OFF)
+if(CORD_SINGLE_HEADER)
+    target_include_directories(cord INTERFACE ${CMAKE_SOURCE_DIR})
+else()
+    target_include_directories(cord INTERFACE ${CMAKE_SOURCE_DIR}/src)
+endif()
 
 option(CORD_BUILD_TESTS    "Build tests"    ON)
 option(CORD_BUILD_EXAMPLES "Build examples" ON)
