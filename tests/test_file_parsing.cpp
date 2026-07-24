@@ -1,63 +1,39 @@
-#ifdef USE_SINGLE_HEADER
+#include <catch2/catch_test_macros.hpp>
 #include "cord.hpp"
-#else
-#include "../src/cord.hpp"
-#endif
-
-#include <cassert>
-#include <iostream>
 #include <fstream>
-#include <sstream>
+#include <cstdio>
 
-// Helper to capture printErrors output
-std::string captureErrors(const cord::Result& result) {
-    std::stringstream ss;
-    std::streambuf* old_cerr = std::cerr.rdbuf(ss.rdbuf());
-    result.printErrors();
-    std::cerr.rdbuf(old_cerr);
-    return ss.str();
+static const std::string TMP_FILE = "cord_test_tmp.conf";
+
+static void writeTmp(const std::string& content) {
+    std::ofstream out(TMP_FILE);
+    out << content;
 }
 
-void test_parse_file_success() {
-    // Create test config file
-    std::ofstream out("test_config.txt");
-    out << "port = 8080\n";
-    out << "host = \"localhost\"\n";
-    out << "debug = true\n";
-    out.close();
+TEST_CASE("parseFile reads valid config", "[file]") {
+    writeTmp("port = 8080\nhost = \"localhost\"\ndebug = true\n");
 
     cord::Schema schema;
     schema.add<int>("port");
     schema.add<std::string>("host");
     schema.add<bool>("debug");
 
-    auto result = schema.parseFile("test_config.txt");
-    assert(!result.hasErrors());
-    assert(result.get("port").as<int>() == 8080);
-    assert(result.get("host").as<std::string>() == "localhost");
-    assert(result.get("debug").as<bool>() == true);
+    auto result = schema.parseFile(TMP_FILE);
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("port").as<int>() == 8080);
+    CHECK(result.get("host").as<std::string>() == "localhost");
+    CHECK(result.get("debug").as<bool>() == true);
 
-    // Cleanup
-    std::remove("test_config.txt");
-
-    std::cout << "✓ test_parse_file_success passed\n";
+    std::remove(TMP_FILE.c_str());
 }
 
-void test_parse_file_not_found() {
+TEST_CASE("parseFile missing file produces error", "[file]") {
     cord::Schema schema;
     schema.add<int>("port");
 
-    auto result = schema.parseFile("nonexistent_file.txt");
-    assert(result.hasErrors());
-    std::string errors = captureErrors(result);
-    assert(errors.find("Failed to open file") != std::string::npos);
-
-    std::cout << "✓ test_parse_file_not_found passed\n";
-}
-
-int main() {
-    test_parse_file_success();
-    test_parse_file_not_found();
-
-    return 0;
+    auto result = schema.parseFile("nonexistent_cord_test.conf");
+    REQUIRE(result.hasErrors());
+    auto& errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("Failed to open file") != std::string::npos);
 }

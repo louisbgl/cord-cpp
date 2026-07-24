@@ -1,53 +1,66 @@
-#ifdef USE_SINGLE_HEADER
+#include <catch2/catch_test_macros.hpp>
 #include "cord.hpp"
-#else
-#include "../src/cord.hpp"
-#endif
 
-#include <cassert>
-#include <iostream>
-
-void test_comments_enabled() {
+TEST_CASE("Line comments skipped", "[comments]") {
     cord::Schema schema;
     schema.setAllowComments(true);
     schema.add<int>("port");
     schema.add<std::string>("host");
 
-    std::string config = R"(
-# This is a comment
-port = 8080
-# Another comment
-host = "localhost"
-)";
-
-    auto result = schema.parse(config);
-    assert(!result.hasErrors());
-    assert(result.get("port").as<int>() == 8080);
-    assert(result.get("host").as<std::string>() == "localhost");
-
-    std::cout << "✓ test_comments_enabled passed\n";
+    auto result = schema.parse("# comment\nport = 8080\n# another\nhost = \"localhost\"");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("port").as<int>() == 8080);
+    CHECK(result.get("host").as<std::string>() == "localhost");
 }
 
-void test_comments_disabled() {
+TEST_CASE("Comments disabled: comment line is malformed", "[comments]") {
     cord::Schema schema;
     schema.setAllowComments(false);
     schema.add<int>("port");
 
-    std::string config = R"(
-# This is a comment
-port = 8080
-)";
-
-    auto result = schema.parse(config);
-    // Comment line treated as malformed (no '=')
-    assert(result.hasErrors());
-
-    std::cout << "✓ test_comments_disabled passed\n";
+    auto result = schema.parse("# comment\nport = 8080");
+    CHECK(result.hasErrors());
 }
 
-int main() {
-    test_comments_enabled();
-    test_comments_disabled();
+TEST_CASE("Inline comments stripped", "[comments]") {
+    cord::Schema schema;
+    schema.setAllowComments(true);
+    schema.add<int>("port");
+    schema.add<bool>("debug");
 
-    return 0;
+    auto result = schema.parse("port = 8080 # inline\ndebug = true # another");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("port").as<int>() == 8080);
+    CHECK(result.get("debug").as<bool>() == true);
+}
+
+TEST_CASE("Inline comments disabled: hash in value causes error", "[comments]") {
+    cord::Schema schema;
+    schema.setAllowComments(false);
+    schema.add<int>("port");
+
+    auto result = schema.parse("port = 8080 # comment");
+    CHECK(result.hasErrors());
+}
+
+TEST_CASE("Hash inside quoted string is not a comment", "[comments]") {
+    cord::Schema schema;
+    schema.setAllowComments(true);
+    schema.add<std::string>("message");
+
+    auto result = schema.parse("message = \"hello # not a comment\"");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("message").as<std::string>() == "hello # not a comment");
+}
+
+TEST_CASE("Inline comments after vector", "[comments]") {
+    cord::Schema schema;
+    schema.setAllowComments(true);
+    schema.add<std::vector<int>>("ports");
+
+    auto result = schema.parse("ports = [8080, 8081, 8082] # list of ports");
+    REQUIRE_FALSE(result.hasErrors());
+    auto ports = result.get("ports").as<std::vector<int>>();
+    REQUIRE(ports.size() == 3);
+    CHECK(ports[0] == 8080);
 }

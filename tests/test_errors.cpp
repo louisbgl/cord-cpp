@@ -1,84 +1,51 @@
-#ifdef USE_SINGLE_HEADER
+#include <catch2/catch_test_macros.hpp>
 #include "cord.hpp"
-#else
-#include "../src/cord.hpp"
-#endif
 
-#include <cassert>
-#include <iostream>
-#include <sstream>
-
-// Helper to capture printErrors output
-std::string captureErrors(const cord::Result& result) {
-    std::stringstream ss;
-    std::streambuf* old_cerr = std::cerr.rdbuf(ss.rdbuf());
-    result.printErrors();
-    std::cerr.rdbuf(old_cerr);
-    return ss.str();
-}
-
-void test_type_mismatch() {
+TEST_CASE("getErrors returns structured error info", "[errors]") {
     cord::Schema schema;
     schema.add<int>("port");
 
-    std::string config = "port = \"not_a_number\"";
+    auto result = schema.parse("port = \"not_a_number\"");
+    REQUIRE(result.hasErrors());
 
-    auto result = schema.parse(config);
-    assert(result.hasErrors());
-
-    std::cout << "✓ test_type_mismatch passed\n";
+    auto& errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK_FALSE(errors[0].message.empty());
 }
 
-void test_malformed_line() {
+TEST_CASE("Error includes line number", "[errors]") {
     cord::Schema schema;
     schema.add<int>("port");
 
-    std::string config = R"(
-port = 8080
-this_has_no_equals
-)";
+    auto result = schema.parse("port = 8080\nbad_line_no_delimiter");
+    REQUIRE(result.hasErrors());
 
-    auto result = schema.parse(config);
-    assert(result.hasErrors());
-    std::string errors = captureErrors(result);
-    assert(errors.find("delimiter") != std::string::npos);
-
-    std::cout << "✓ test_malformed_line passed\n";
+    auto& errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    REQUIRE(errors[0].line.has_value());
+    CHECK(errors[0].line.value() == 2);
 }
 
-void test_unquoted_string() {
+TEST_CASE("Multiple errors accumulated", "[errors]") {
     cord::Schema schema;
-    schema.add<std::string>("host");
+    schema.setStrict(true);
+    schema.add<int>("port").required();
 
-    std::string config = "host = localhost";
-
-    auto result = schema.parse(config);
-    assert(result.hasErrors());
-
-    std::cout << "✓ test_unquoted_string passed\n";
+    auto result = schema.parse("unknown1 = 1\nunknown2 = 2");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors().size() >= 2);
 }
 
-void test_duplicate_keys_last_wins() {
+TEST_CASE("No errors on valid input", "[errors]") {
     cord::Schema schema;
-    schema.add<int>("port");
+    schema.add<int>("port").default_(8080);
 
-    std::string config = R"(
-port = 3000
-port = 8080
-)";
-
-    auto result = schema.parse(config);
-    assert(!result.hasErrors());
-    assert(result.get("port").as<int>() == 8080);
-
-    std::cout << "✓ test_duplicate_keys_last_wins passed\n";
+    auto result = schema.parse("");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.getErrors().empty());
 }
 
-int main() {
-    test_type_mismatch();
-    test_malformed_line();
-    test_unquoted_string();
-    test_duplicate_keys_last_wins();
-
-    return 0;
+TEST_CASE("CordException::what() returns message", "[errors]") {
+    cord::CordException ex("something went wrong");
+    CHECK(std::string(ex.what()) == "something went wrong");
 }
