@@ -79,7 +79,11 @@ public:
     template<typename T>
     T as() const {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
-        return std::get<T>(_value);
+        try {
+            return std::get<T>(_value);
+        } catch (const std::bad_variant_access&) {
+            throw CordException("Type mismatch in as<T>(): value holds a different type");
+        }
     }
 
     /**
@@ -156,7 +160,6 @@ class IField {
 public:
     virtual ~IField() = default;
 
-    virtual void validate() const = 0;
     virtual std::string getName() const = 0;
     virtual FieldType getType() const = 0;
     virtual bool hasDefault() const = 0;
@@ -177,16 +180,6 @@ public:
     Field(const std::string& name, std::optional<T> default_value = std::nullopt)
         : _name(name), _default_value(default_value) {}
 
-    /**
-     * @brief Ensures proper field configuration.
-     * @throws CordException if the field is both required and has a default value.
-     */
-    void validate() const override {
-        if (_required && _default_value.has_value()) {
-            throw CordException("Field '" + _name + "' can't be both required and have a default value");
-        }
-    }
-
     // Gets the name of the field
     std::string getName() const override {
         return _name;
@@ -205,12 +198,8 @@ public:
     /**
      * @brief Gets the default value of the field.
      * @return The default value.
-     * @throws CordException if no default is set.
      */
     Value getDefault() const override {
-        if (!_default_value.has_value()) {
-            throw CordException("Field '" + _name + "' does not have a default value");
-        }
         return Value(_default_value.value());
     }
 
@@ -221,12 +210,16 @@ public:
 
     // Marks the field as required
     Field<T>& required() {
+        if (_default_value.has_value())
+            throw CordException("Field '" + _name + "' can't be both required and have a default value");
         _required = true;
         return *this;
     }
 
     // Sets the default value of the field
     Field<T>& default_(T val) {
+        if (_required)
+            throw CordException("Field '" + _name + "' can't be both required and have a default value");
         _default_value = val;
         return *this;
     }
