@@ -69,6 +69,10 @@ public:
         return _ec.hasErrors();
     }
 
+    const std::vector<ParseError> getErrors() const {
+        return _ec.getErrors();
+    }
+
     // Prints all parsing errors to std::cerr
     void printErrors() const {
         for (const auto& error : _ec.getErrors()) {
@@ -190,9 +194,6 @@ public:
 
         ensureRequiredFieldsPresent(result);
         applyDefaultValues(result);
-        for (const auto& field : _fields) {
-            field->validate();
-        }
         return result;
     }
 
@@ -370,9 +371,9 @@ private:
                 return std::nullopt;
             }
             return value;
-        } catch (std::out_of_range) {
+        } catch (const std::out_of_range&) {
             return std::nullopt;
-        } catch (...) {
+        } catch (const std::invalid_argument&) {
             return std::nullopt;
         }
     }
@@ -385,9 +386,9 @@ private:
                 return std::nullopt;
             }
             return value;
-        } catch (std::out_of_range) {
+        } catch (const std::out_of_range&) {
             return std::nullopt;
-        } catch (...) {
+        } catch (const std::invalid_argument&) {
             return std::nullopt;
         }
     }
