@@ -1,4 +1,4 @@
-#include "../../cord.hpp"
+#include "cord.hpp"
 
 #include <iostream>
 
@@ -7,7 +7,7 @@ int main() {
     schema.add<int>("port");
     schema.add<std::string>("env").required();
 
-    auto result = schema.parseFile("examples/optionals/optionals.conf");
+    auto result = schema.parseFile("optionals.conf");
 
     if (result.hasErrors()) result.printErrors();
     else {

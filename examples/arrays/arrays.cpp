@@ -1,4 +1,4 @@
-#include "../../cord.hpp"
+#include "cord.hpp"
 
 #include <iostream>
 
@@ -22,7 +22,7 @@ int main() {
     schema.describe();
     std::cout << std::endl;
 
-    auto result = schema.parseFile("examples/arrays/arrays.conf");
+    auto result = schema.parseFile("arrays.conf");
     if (result.hasErrors()) result.printErrors();
     else {
         std::cout << "Parsed values:" << std::endl;

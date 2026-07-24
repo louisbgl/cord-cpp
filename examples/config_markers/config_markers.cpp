@@ -1,4 +1,4 @@
-#include "../../cord.hpp"
+#include "cord.hpp"
 
 #include <iostream>
 
@@ -22,7 +22,7 @@ int main() {
     schema.add<std::string>("host").default_("localhost");
     schema.add<bool>("debug").default_(false);
 
-    auto result = schema.parseFile("examples/config_markers/config_markers.conf");
+    auto result = schema.parseFile("config_markers.conf");
 
     if (result.hasErrors()) result.printErrors();
     else {

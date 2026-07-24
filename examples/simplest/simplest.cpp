@@ -1,4 +1,4 @@
-#include "../../cord.hpp"
+#include "cord.hpp"
 
 #include <iostream>
 
@@ -24,7 +24,7 @@ int main() {
 
     // Could also use schema.parse() on a string if wanted
     // parseFile is just a wrapper around schema.parse()
-    auto result = schema.parseFile("examples/simplest/simplest.conf");
+    auto result = schema.parseFile("simplest.conf");
 
     // Result is a container for the parsed values and any errors that may have occurred during parsing
     if (result.hasErrors()) result.printErrors();
