@@ -1,17 +1,18 @@
 # cord, a Config Reader
 
-Header-only C++ configuration parser with schema validation and fluent API.
+Header-only C++20 configuration parser with schema validation and fluent API.
 
 ## Requirements
 
-C++20 or later. That's it.
+- C++20 or later
+- POSIX-compatible system (Linux, macOS). Windows is not supported.
 
 ## Features
 
 - **Header-only**: zero dependencies
 - **Type-safe**: compile-time checks via `static_assert`
 - **Fluent API**: chain `.required()`, `.default_()`
-- **Error accumulation**: report all errors at once
+- **Error accumulation**: collect and inspect all errors at once
 - **Strict/lenient modes**: reject or ignore unknown keys
 
 ## Config File Format
@@ -25,27 +26,15 @@ C++20 or later. That's it.
 - **Comments:** `#` line or inline comments (when enabled)
 - **Duplicate keys:** Last value wins
 
-## Examples
-
-Check the [`examples/`](examples/) directory for complete working examples:
-- **[simplest](examples/simplest/)**: Basic usage with primitives
-- **[arrays](examples/arrays/)**: Vector support with `[]` syntax
-- **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
-- **[optionals](examples/optionals)**: Always safe optional fields retrieval
-
 ## Installation
 
 cord ships as a single header. You only need `cord.hpp`.
 
 ### Option 1: Download the header
 
-Download the header into your project:
-
 ```bash
 curl -O https://raw.githubusercontent.com/louisbgl/cord-cpp/main/cord.hpp
 ```
-
-Then include it in your code:
 
 ```cpp
 #include "cord.hpp"
@@ -63,49 +52,37 @@ FetchContent_MakeAvailable(cord)
 target_link_libraries(your_app PRIVATE cord)
 ```
 
-Then include in your code:
-
 ```cpp
 #include "cord.hpp"
 ```
 
-## Quick Start
+## Examples
 
-```cpp
-#include "cord.hpp"
+Build and run examples with CMake from the project root:
 
-int main() {
-    // Define schema
-    cord::Schema schema;
-    schema.add<int>("port").required();
-    schema.add<std::string>("host").default_("localhost");
-    schema.add<bool>("debug").default_(false);
-    schema.add<double>("timeout").default_(30.0);
+```bash
+cmake -S . -B build && cmake --build build
 
-    // Parse config file
-    auto result = schema.parseFile("config.txt");
-
-    // Check for errors
-    if (result.hasErrors()) {
-        result.printErrors();
-        return 1;
-    }
-
-    // Access values
-    int port = result.get("port").as<int>();
-    std::string host = result.get("host").as<std::string>();
-    bool debug = result.get("debug").as<bool>();
-
-    return 0;
-}
+cmake --build build --target run_simplest
+cmake --build build --target run_arrays
+cmake --build build --target run_optionals
+cmake --build build --target run_config_markers
 ```
 
-**Example config file:**
-```ini
-port = 8080
-host = "example.com"
-debug = true
-timeout = 45.5
+See the [`examples/`](examples/) directory for source:
+- **[simplest](examples/simplest/)**: Primitives, required fields, defaults
+- **[arrays](examples/arrays/)**: Vector support with `[]` syntax
+- **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
+- **[optionals](examples/optionals/)**: Safe optional field retrieval with `get_or()`
+
+## Building & Testing
+
+Requires CMake 3.15+ and a C++20 compiler.
+
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
 ## API Reference
@@ -115,77 +92,75 @@ timeout = 45.5
 ```cpp
 cord::Schema schema;
 
-// Add fields with type
+// Scalar types
 schema.add<int>("name");
 schema.add<float>("name");
 schema.add<double>("name");
 schema.add<bool>("name");
-
-// Also in vector form
 schema.add<std::string>("name");
+
+// Vector types
 schema.add<std::vector<int>>("name");
 schema.add<std::vector<float>>("name");
 schema.add<std::vector<double>>("name");
 schema.add<std::vector<bool>>("name");
 schema.add<std::vector<std::string>>("name");
 
-// Mark as required
+// Mark as required (throws CordException if missing at parse time)
 schema.add<int>("port").required();
 
-// Set default value
+// Set default value (used when key is absent)
 schema.add<std::string>("host").default_("localhost");
 
-// Enable comments in config file
+// Comments (enabled by default)
 schema.setAllowComments(true);
 
-// Strict mode (reject unknown keys)
+// Strict mode: reject unknown keys (disabled by default)
 schema.setStrict(true);
 
-// Customize delimiter (default: "=")
-schema.setDelimiter(":");   // or multi-char like "=="
-schema.setDelimiter(':');   // or single char
+// Custom delimiter (default: "=")
+schema.setDelimiter(':');    // single char
+schema.setDelimiter("==");  // or multi-char string
 
-// Customize comment marker (default: "#")
-schema.setCommentMarker("//");  // or multi-char like "--"
-schema.setCommentMarker(';');   // or single char
+// Custom comment marker (default: "#")
+schema.setCommentMarker(';');   // single char
+schema.setCommentMarker("//"); // or multi-char string
 
-// Debug: print schema structure
+// Print schema as a C-style struct (useful for debugging)
 schema.describe();
 ```
 
 ### Parsing
 
 ```cpp
-// Parse from string
-auto result = schema.parse(config_string);
-
-// Parse from file
-auto result = schema.parseFile("config.txt");
+auto result = schema.parse(config_string);     // from string
+auto result = schema.parseFile("config.txt");  // from file
 ```
 
 ### Error Handling
 
 ```cpp
-// Check for errors
 if (result.hasErrors()) {
-    result.printErrors();  // Print to stderr
+    result.printErrors();  // print all errors to stderr
+
+    // or inspect programmatically
+    for (const auto& err : result.getErrors()) {
+        std::cerr << err.message;
+        if (err.line.has_value()) std::cerr << " (line " << *err.line << ")";
+        std::cerr << "\n";
+    }
 }
 ```
 
 ### Value Access
 
 ```cpp
-// Get and convert value
-int port = result.get("port").as<int>();
+// Get and convert, throws CordException if key missing or type wrong
+int port         = result.get("port").as<int>();
 std::string host = result.get("host").as<std::string>();
 
-// Get with safety
-int fallback = 67; // Can be computed at runtime, maybe depends on other config values
-int port = result.get_or("port", fallback).as<int>();
-
-// Throws CordException if:
-// - Key not found
-// - Type mismatch in as<T>()
+// Safe fallback, fallback can be a runtime value
+int port = result.get_or("port", env == "prod" ? 443 : 8080).as<int>();
 ```
 
 ## License
