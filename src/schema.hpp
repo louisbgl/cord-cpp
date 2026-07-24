@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 #include <memory>
@@ -369,6 +370,8 @@ private:
                 return std::nullopt;
             }
             return value;
+        } catch (std::out_of_range) {
+            return std::nullopt;
         } catch (...) {
             return std::nullopt;
         }
@@ -382,6 +385,8 @@ private:
                 return std::nullopt;
             }
             return value;
+        } catch (std::out_of_range) {
+            return std::nullopt;
         } catch (...) {
             return std::nullopt;
         }
