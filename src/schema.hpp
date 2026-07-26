@@ -204,7 +204,7 @@ public:
             if (!parsed) {
                 std::string msg = "Failed to parse value for key: " + std::string(key);
                 if (!parse_error.empty()) msg += " (" + parse_error + ")";
-                result._ec.addError(msg);
+                result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
             } else {
                 checkFieldConstraints(result, field, i + 1);
             }
@@ -428,12 +428,12 @@ private:
         try {
             size_t idx;
             int value = std::stoi(std::string(str), &idx);
-            if (idx != str.size()) return {};
+            if (idx != str.size()) return {{}, "got: \"" + std::string(str) + "\""};
             return {value};
         } catch (const std::out_of_range&) {
-            return {};
+            return {{}, "value out of range for int: \"" + std::string(str) + "\""};
         } catch (const std::invalid_argument&) {
-            return {};
+            return {{}, "got: \"" + std::string(str) + "\""};
         }
     }
 
@@ -441,25 +441,25 @@ private:
         try {
             size_t idx;
             double value = std::stod(std::string(str), &idx);
-            if (idx != str.size()) return {};
+            if (idx != str.size()) return {{}, "got: \"" + std::string(str) + "\""};
             return {value};
         } catch (const std::out_of_range&) {
-            return {};
+            return {{}, "value out of range for double: \"" + std::string(str) + "\""};
         } catch (const std::invalid_argument&) {
-            return {};
+            return {{}, "got: \"" + std::string(str) + "\""};
         }
     }
 
     ParseResult<float> _tryParseFloat(const std::string_view str) const {
         auto res = _tryParseDouble(str);
-        if (!res.value.has_value()) return {};
+        if (!res.value.has_value()) return {{}, res.error};
         return {static_cast<float>(*res.value)};
     }
 
     ParseResult<bool> _tryParseBool(const std::string_view str) const {
         if (str == "true") return {true};
         if (str == "false") return {false};
-        return {};
+        return {{}, "expected 'true' or 'false', got: \"" + std::string(str) + "\""};
     }
 
     ParseResult<std::string> _tryParseString(const std::string_view str) const {
