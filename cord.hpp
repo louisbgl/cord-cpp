@@ -1,11 +1,13 @@
 // cord - Config Reader
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -67,6 +69,62 @@ constexpr bool is_supported_value_type_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
+// Converts any supported cord type to its string representation
+template<typename T>
+std::string valueToString(const T& val) {
+    if constexpr (std::is_same_v<T, bool>)
+        return val ? "true" : "false";
+    else if constexpr (std::is_same_v<T, std::string>)
+        return "\"" + val + "\"";
+    else if constexpr (is_numeric_type_v<T>)
+        return std::to_string(val);
+    else if constexpr (std::is_same_v<typename T::value_type, bool>)
+        // vector<bool> handled separately — operator[] returns proxy, not bool ref
+        return "[" + [&]{ std::string s; for (size_t i = 0; i < val.size(); ++i) { s += (val[i] ? "true" : "false"); if (i < val.size()-1) s += ", "; } return s; }() + "]";
+    else {
+        // vector<int/float/double/string>
+        using Elem = typename T::value_type;
+        std::string s = "[";
+        for (size_t i = 0; i < val.size(); ++i) {
+            s += valueToString<Elem>(val[i]);
+            if (i < val.size() - 1) s += ", ";
+        }
+        return s + "]";
+    }
+}
+
+/**
+ * @brief Enum representing the supported field types in the schema.
+ */
+enum class FieldType {
+    BOOL,
+    INT,
+    FLOAT,
+    DOUBLE,
+    STRING,
+    VECTOR_BOOL,
+    VECTOR_INT,
+    VECTOR_FLOAT,
+    VECTOR_DOUBLE,
+    VECTOR_STRING
+};
+
+// Returns the display name for a FieldType (used by Schema::describe())
+inline std::string fieldTypeName(FieldType type) {
+    switch (type) {
+        case FieldType::BOOL:          return "bool";
+        case FieldType::INT:           return "int";
+        case FieldType::FLOAT:         return "float";
+        case FieldType::DOUBLE:        return "double";
+        case FieldType::STRING:        return "string";
+        case FieldType::VECTOR_BOOL:   return "vector<bool>";
+        case FieldType::VECTOR_INT:    return "vector<int>";
+        case FieldType::VECTOR_FLOAT:  return "vector<float>";
+        case FieldType::VECTOR_DOUBLE: return "vector<double>";
+        case FieldType::VECTOR_STRING: return "vector<string>";
+    }
+}
+
 /**
  * @brief Exception class for errors in the cord library.
  */
@@ -81,22 +139,6 @@ public:
 
 private:
     std::string _message;
-};
-
-/**
-* @brief Enum representing the supported field types in the schema.
-*/
-enum class FieldType {
-    BOOL,
-    INT,
-    FLOAT,
-    DOUBLE,
-    STRING,
-    VECTOR_BOOL,
-    VECTOR_INT,
-    VECTOR_FLOAT,
-    VECTOR_DOUBLE,
-    VECTOR_STRING
 };
 
 /**
@@ -185,35 +227,17 @@ public:
      * @throws CordException if the type is unknown.
      */
     std::string toString() const {
-        // lambda to convert vector to string
-        auto vectorToString = [](const auto& vec) -> std::string {
-            using Elem = typename std::decay_t<decltype(vec)>::value_type;
-            std::string result = "[";
-            for (size_t i = 0; i < vec.size(); ++i) {
-                if constexpr (std::is_same_v<Elem, std::string>) {
-                    result += "\"" + vec[i] + "\"";
-                } else if constexpr (std::is_same_v<Elem, bool>) {
-                    result += vec[i] ? "true" : "false";
-                } else {
-                    result += std::to_string(vec[i]);
-                }
-                if (i < vec.size() - 1) result += ", ";
-            }
-            result += "]";
-            return result;
-        };
-
         switch (_value.index()) {
-            case 0: return std::get<bool>(_value) ? "true" : "false";
-            case 1: return std::to_string(std::get<int>(_value));
-            case 2: return std::to_string(std::get<float>(_value));
-            case 3: return std::to_string(std::get<double>(_value));
-            case 4: return "\"" + std::get<std::string>(_value) + "\"";
-            case 5: return vectorToString(std::get<std::vector<bool>>(_value));
-            case 6: return vectorToString(std::get<std::vector<int>>(_value));
-            case 7: return vectorToString(std::get<std::vector<float>>(_value));
-            case 8: return vectorToString(std::get<std::vector<double>>(_value));
-            case 9: return vectorToString(std::get<std::vector<std::string>>(_value));
+            case 0: return valueToString(std::get<bool>(_value));
+            case 1: return valueToString(std::get<int>(_value));
+            case 2: return valueToString(std::get<float>(_value));
+            case 3: return valueToString(std::get<double>(_value));
+            case 4: return valueToString(std::get<std::string>(_value));
+            case 5: return valueToString(std::get<std::vector<bool>>(_value));
+            case 6: return valueToString(std::get<std::vector<int>>(_value));
+            case 7: return valueToString(std::get<std::vector<float>>(_value));
+            case 8: return valueToString(std::get<std::vector<double>>(_value));
+            case 9: return valueToString(std::get<std::vector<std::string>>(_value));
             default: throw CordException("Unknown type");
         }
     }
@@ -238,6 +262,7 @@ public:
     virtual Value getDefault() const = 0;
     virtual bool isRequired() const = 0;
     virtual std::optional<std::string> checkConstraints(const Value& value) const = 0;
+    virtual std::string describeConstraints() const = 0;
 };
 
 /**
@@ -285,11 +310,46 @@ public:
         if constexpr (is_numeric_type_v<T>) {
             T v = value.as<T>();
             if (_min_value.has_value() && v < *_min_value)
-                return "value " + std::to_string(v) + " is below minimum " + std::to_string(*_min_value);
+                return "value " + valueToString(v) + " is below minimum " + valueToString(*_min_value);
             if (_max_value.has_value() && v > *_max_value)
-                return "value " + std::to_string(v) + " exceeds maximum " + std::to_string(*_max_value);
+                return "value " + valueToString(v) + " exceeds maximum " + valueToString(*_max_value);
+        }
+        if (_allowed_values.has_value()) {
+            T v = value.as<T>();
+            if (std::find(_allowed_values->begin(), _allowed_values->end(), v) == _allowed_values->end()) {
+                std::string v_str = valueToString(v);
+                return "value " + v_str + " is not in allowed values";
+            }
         }
         return std::nullopt;
+    }
+
+    std::string describeConstraints() const override {
+        std::string range;
+        std::string choices;
+
+        if constexpr (is_numeric_type_v<T>) {
+            if (_min_value.has_value() || _max_value.has_value()) {
+                range = "[";
+                range += _min_value.has_value() ? valueToString(*_min_value) : "";
+                range += "..";
+                range += _max_value.has_value() ? valueToString(*_max_value) : "";
+                range += "]";
+            }
+        }
+
+        if (_allowed_values.has_value()) {
+            choices = "[oneOf={";
+            for (size_t i = 0; i < _allowed_values->size(); ++i) {
+                choices += valueToString((*_allowed_values)[i]);
+                if (i < _allowed_values->size() - 1) choices += ", ";
+            }
+            choices += "}]";
+        }
+
+        if (!range.empty() && !choices.empty()) return range + "  " + choices;
+        if (!range.empty()) return range;
+        return choices;
     }
 
     // Marks the field as required
@@ -313,6 +373,7 @@ public:
      * @param val The minimum value (inclusive).
      * @return Reference to this field for chaining.
      *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
      * @note Only supported for numeric types (int, float, double).
      */
     Field<T>& min(T val) {
@@ -326,11 +387,25 @@ public:
      * @param val The maximum value (inclusive).
      * @return Reference to this field for chaining.
      *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
      * @note Only supported for numeric types (int, float, double).
      */
     Field<T>& max(T val) {
         static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
         _max_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the allowed values for the field.
+     * @param values The list of allowed values.
+     * @return Reference to this field for chaining.
+     *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
+     */
+    Field<T>& oneOf(std::initializer_list<T> values) {
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("oneOf()"));
+        _allowed_values = std::vector<T>(values);
         return *this;
     }
 
@@ -340,6 +415,7 @@ private:
     bool _required = false;
     std::optional<T> _min_value = std::nullopt;
     std::optional<T> _max_value = std::nullopt;
+    std::optional<std::vector<T>> _allowed_values = std::nullopt;
 };
 
 /**
@@ -579,43 +655,66 @@ public:
 
     // Prints to std::cout a C-style struct representation of the schema
     void describe() const {
-        std::cout << "Schema {" << std::endl;
+        static constexpr size_t GROUP_THRESHOLD = 10;
 
-        for (const auto& field : _fields) {
-            switch (field->getType()) {
-                case FieldType::BOOL:
-                    std::cout << "  bool " << field->getName(); break;
-                case FieldType::INT:
-                    std::cout << "  int " << field->getName(); break;
-                case FieldType::FLOAT:
-                    std::cout << "  float " << field->getName(); break;
-                case FieldType::DOUBLE:
-                    std::cout << "  double " << field->getName(); break;
-                case FieldType::STRING:
-                    std::cout << "  string " << field->getName(); break;
-                case FieldType::VECTOR_BOOL:
-                    std::cout << "  vector<bool> " << field->getName(); break;
-                case FieldType::VECTOR_INT:
-                    std::cout << "  vector<int> " << field->getName(); break;
-                case FieldType::VECTOR_FLOAT:
-                    std::cout << "  vector<float> " << field->getName(); break;
-                case FieldType::VECTOR_DOUBLE:
-                    std::cout << "  vector<double> " << field->getName(); break;
-                case FieldType::VECTOR_STRING:
-                    std::cout << "  vector<string> " << field->getName(); break;
-            }
-
-            if (field->hasDefault()) {
-                std::cout << " (default = " << field->getDefault().toString() << ")";
-            }
-
-            if (field->isRequired()) {
-                std::cout << " (required)";
-            }
-
-            std::cout << std::endl;
+        size_t max_type_len = 0;
+        size_t max_name_len = 0;
+        for (const auto& f : _fields) {
+            max_type_len = std::max(max_type_len, fieldTypeName(f->getType()).size());
+            max_name_len = std::max(max_name_len, f->getName().size());
         }
-        std::cout << "}" << std::endl;
+
+        auto print_field = [&](const std::unique_ptr<IField>& f) {
+            std::string type = fieldTypeName(f->getType());
+            std::string name = f->getName();
+            std::cout << "  " << type << std::string(max_type_len - type.size() + 2, ' ');
+            std::cout << name;
+
+            std::string modifier;
+            if (f->isRequired())      modifier = "(required)";
+            else if (f->hasDefault()) modifier = "(default=" + f->getDefault().toString() + ")";
+
+            if (!modifier.empty()) {
+                std::cout << std::string(max_name_len - name.size() + 2, ' ') << modifier;
+            }
+
+            std::string constraints = f->describeConstraints();
+            if (!constraints.empty()) {
+                size_t mod_pad = modifier.empty() ? max_name_len - name.size() + 2 : 2;
+                std::cout << std::string(mod_pad, ' ') << constraints;
+            }
+
+            std::cout << "\n";
+        };
+
+        std::cout << "Schema {\n";
+
+        if (_fields.size() <= GROUP_THRESHOLD) {
+            for (const auto& f : _fields) print_field(f);
+        } else {
+            static const std::vector<std::vector<FieldType>> groups = {
+                { FieldType::INT, FieldType::FLOAT, FieldType::DOUBLE },
+                { FieldType::BOOL },
+                { FieldType::STRING },
+                { FieldType::VECTOR_INT, FieldType::VECTOR_FLOAT, FieldType::VECTOR_DOUBLE, FieldType::VECTOR_BOOL, FieldType::VECTOR_STRING },
+            };
+
+            bool first_group = true;
+            for (const auto& group : groups) {
+                bool printed_any = false;
+                for (FieldType type : group) {
+                    for (const auto& f : _fields) {
+                        if (f->getType() != type) continue;
+                        if (!printed_any && !first_group) std::cout << "\n";
+                        print_field(f);
+                        printed_any = true;
+                    }
+                }
+                if (printed_any) first_group = false;
+            }
+        }
+
+        std::cout << "}\n";
     }
 
     /**
