@@ -25,7 +25,11 @@ int main() {
 
     // min()/max() and oneOf() can be combined on numeric fields
     // Here timeout_ms must be in [100, 30000] AND one of the accepted preset values
-    schema.add<int>("timeout_ms").default_(1000).min(100).max(30000).oneOf({100, 500, 1000, 5000, 30000});
+    schema.add<int>("timeout_ms")
+        .default_(1000)
+        .min(100)
+        .max(30000)
+        .oneOf({100, 500, 1000, 5000, 30000});
 
     auto result = schema.parseFile("constraints.conf");
 
