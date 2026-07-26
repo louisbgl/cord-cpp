@@ -78,4 +78,37 @@ std::string valueToString(const T& val) {
     }
 }
 
+/**
+ * @brief Enum representing the supported field types in the schema.
+ */
+enum class FieldType {
+    BOOL,
+    INT,
+    FLOAT,
+    DOUBLE,
+    STRING,
+    VECTOR_BOOL,
+    VECTOR_INT,
+    VECTOR_FLOAT,
+    VECTOR_DOUBLE,
+    VECTOR_STRING
+};
+
+// Returns the display name for a FieldType (used by Schema::describe())
+inline std::string fieldTypeName(FieldType type) {
+    switch (type) {
+        case FieldType::BOOL:          return "bool";
+        case FieldType::INT:           return "int";
+        case FieldType::FLOAT:         return "float";
+        case FieldType::DOUBLE:        return "double";
+        case FieldType::STRING:        return "string";
+        case FieldType::VECTOR_BOOL:   return "vector<bool>";
+        case FieldType::VECTOR_INT:    return "vector<int>";
+        case FieldType::VECTOR_FLOAT:  return "vector<float>";
+        case FieldType::VECTOR_DOUBLE: return "vector<double>";
+        case FieldType::VECTOR_STRING: return "vector<string>";
+        default:                       return "unknown";
+    }
+}
+
 } // namespace cord

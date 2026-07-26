@@ -14,22 +14,6 @@
 namespace cord {
 
 /**
-* @brief Enum representing the supported field types in the schema.
-*/
-enum class FieldType {
-    BOOL,
-    INT,
-    FLOAT,
-    DOUBLE,
-    STRING,
-    VECTOR_BOOL,
-    VECTOR_INT,
-    VECTOR_FLOAT,
-    VECTOR_DOUBLE,
-    VECTOR_STRING
-};
-
-/**
 * @brief Helper function to get the FieldType from a C++ type.
 * @tparam T The C++ type for which to get the FieldType.
 * @return The corresponding FieldType.
@@ -150,6 +134,7 @@ public:
     virtual Value getDefault() const = 0;
     virtual bool isRequired() const = 0;
     virtual std::optional<std::string> checkConstraints(const Value& value) const = 0;
+    virtual std::string describeConstraints() const = 0;
 };
 
 /**
@@ -209,6 +194,34 @@ public:
             }
         }
         return std::nullopt;
+    }
+
+    std::string describeConstraints() const override {
+        std::string range;
+        std::string choices;
+
+        if constexpr (is_numeric_type_v<T>) {
+            if (_min_value.has_value() || _max_value.has_value()) {
+                range = "[";
+                range += _min_value.has_value() ? valueToString(*_min_value) : "";
+                range += "..";
+                range += _max_value.has_value() ? valueToString(*_max_value) : "";
+                range += "]";
+            }
+        }
+
+        if (_allowed_values.has_value()) {
+            choices = "[oneOf={";
+            for (size_t i = 0; i < _allowed_values->size(); ++i) {
+                choices += valueToString((*_allowed_values)[i]);
+                if (i < _allowed_values->size() - 1) choices += ", ";
+            }
+            choices += "}]";
+        }
+
+        if (!range.empty() && !choices.empty()) return range + "  " + choices;
+        if (!range.empty()) return range;
+        return choices;
     }
 
     // Marks the field as required
