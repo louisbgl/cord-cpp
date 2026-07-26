@@ -189,3 +189,70 @@ TEST_CASE("constraint error includes line number", "[schema][constraints]") {
     REQUIRE(result.getErrors()[0].line.has_value());
     CHECK(result.getErrors()[0].line.value() == 1);
 }
+
+TEST_CASE("oneOf() accepted value passes", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("level").oneOf({"debug", "info", "warn", "error"});
+
+    CHECK_FALSE(schema.parse("level = \"info\"").hasErrors());
+    CHECK_FALSE(schema.parse("level = \"debug\"").hasErrors());
+}
+
+TEST_CASE("oneOf() rejected value produces error", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("level").oneOf({"debug", "info", "warn", "error"});
+
+    auto result = schema.parse("level = \"trace\"");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("not in allowed values") != std::string::npos);
+}
+
+TEST_CASE("oneOf() error message contains rejected value", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("env").oneOf({"dev", "staging", "prod"});
+
+    auto result = schema.parse("env = \"local\"");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("\"local\"") != std::string::npos);
+}
+
+TEST_CASE("oneOf() for int field", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("verbosity").oneOf({0, 1, 2, 3});
+
+    CHECK_FALSE(schema.parse("verbosity = 2").hasErrors());
+    CHECK(schema.parse("verbosity = 5").hasErrors());
+}
+
+TEST_CASE("oneOf() for bool field", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<bool>("enabled").oneOf({true});
+
+    CHECK_FALSE(schema.parse("enabled = true").hasErrors());
+    CHECK(schema.parse("enabled = false").hasErrors());
+}
+
+TEST_CASE("oneOf() combined with required()", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("mode").required().oneOf({"read", "write"});
+
+    CHECK_FALSE(schema.parse("mode = \"read\"").hasErrors());
+
+    auto missing = schema.parse("");
+    REQUIRE(missing.hasErrors());
+    CHECK(missing.getErrors()[0].message.find("mode") != std::string::npos);
+
+    auto invalid = schema.parse("mode = \"exec\"");
+    REQUIRE(invalid.hasErrors());
+    CHECK(invalid.getErrors()[0].message.find("not in allowed values") != std::string::npos);
+}
+
+TEST_CASE("oneOf() error includes line number", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("level").oneOf({"info", "warn"});
+
+    auto result = schema.parse("level = \"trace\"");
+    REQUIRE(result.hasErrors());
+    REQUIRE(result.getErrors()[0].line.has_value());
+    CHECK(result.getErrors()[0].line.value() == 1);
+}

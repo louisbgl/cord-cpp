@@ -11,7 +11,7 @@ Header-only C++20 configuration parser with schema validation and fluent API.
 
 - **Header-only**: zero dependencies
 - **Type-safe**: compile-time checks via `static_assert`
-- **Fluent API**: chain `.required()`, `.default_()`
+- **Fluent API**: chain `.required()`, `.default_()`, `.min()`, `.max()`, `.oneOf()`
 - **Error accumulation**: collect and inspect all errors at once
 - **Strict/lenient modes**: reject or ignore unknown keys
 
@@ -111,6 +111,14 @@ schema.add<int>("port").required();
 
 // Set default value (used when key is absent)
 schema.add<std::string>("host").default_("localhost");
+
+// Numeric range constraints (int, float, double only)
+schema.add<int>("port").min(1024).max(65535);
+schema.add<float>("ratio").min(0.0f).max(1.0f);
+
+// Restrict to a set of allowed values
+schema.add<std::string>("level").oneOf({"debug", "info", "warn", "error"});
+schema.add<int>("verbosity").oneOf({0, 1, 2, 3});
 
 // Comments (enabled by default)
 schema.setAllowComments(true);
