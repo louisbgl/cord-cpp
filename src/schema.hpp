@@ -74,7 +74,7 @@ public:
         return _ec.hasErrors();
     }
 
-    const std::vector<ParseError> getErrors() const {
+    const std::vector<ParseError>& getErrors() const {
         return _ec.getErrors();
     }
 
