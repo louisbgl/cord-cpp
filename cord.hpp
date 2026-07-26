@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cstddef>
 #include <cstring>
 #include <exception>
@@ -114,6 +115,13 @@ enum class FieldType {
     VECTOR_DOUBLE,
     VECTOR_STRING
 };
+
+// Lowercases a string_view into a new std::string
+inline std::string toLower(std::string_view s) {
+    std::string out(s);
+    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
 
 // Returns the display name for a FieldType (used by Schema::describe())
 inline std::string fieldTypeName(FieldType type) {
@@ -590,10 +598,13 @@ public:
 
             IField* field = nullptr;
             for (const auto& f : _fields) {
-                if (f->getName() == key) {
-                    field = f.get();
-                    break;
+                if (_case_insensitive) {
+                    if (toLower(f->getName()) != toLower(key)) continue;
+                } else {
+                    if (f->getName() != key) continue;
                 }
+                field = f.get();
+                break;
             }
 
             if (!field) {
@@ -750,6 +761,12 @@ public:
         _strict = strict;
     }
 
+    // Enables case-insensitive key matching (e.g. "Port" matches field "port")
+    // Defaults to false
+    void setCaseInsensitive(bool enabled) {
+        _case_insensitive = enabled;
+    }
+
     // Sets whether comments are allowed in the input
     // Defaults to true
     void setAllowComments(bool allow) {
@@ -798,6 +815,7 @@ private:
     std::vector<std::unique_ptr<IField>> _fields;
     bool _strict = false;
     bool _allow_comments = true;
+    bool _case_insensitive = false;
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
 
