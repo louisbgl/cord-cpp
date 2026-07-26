@@ -103,6 +103,49 @@ TEST_CASE("contains() returns false for absent optional field", "[schema]") {
     CHECK_FALSE(result.contains("port"));
 }
 
+TEST_CASE("Case-insensitive: off by default, key not matched", "[schema][case]") {
+    cord::Schema schema;
+    schema.add<int>("port");
+
+    auto result = schema.parse("PORT = 8080");
+    REQUIRE_FALSE(result.hasErrors()); // lenient: no error, but key not matched
+    CHECK_FALSE(result.contains("port"));
+}
+
+TEST_CASE("Case-insensitive: uppercase key matches lowercase field", "[schema][case]") {
+    cord::Schema schema;
+    schema.setCaseInsensitive(true);
+    schema.add<int>("port");
+
+    auto result = schema.parse("PORT = 8080");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("port").as<int>() == 8080);
+}
+
+TEST_CASE("Case-insensitive: mixed case key matches field", "[schema][case]") {
+    cord::Schema schema;
+    schema.setCaseInsensitive(true);
+    schema.add<std::string>("host");
+    schema.add<int>("port");
+
+    auto result = schema.parse("Host = \"localhost\"\nPORT = 9090");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("host").as<std::string>() == "localhost");
+    CHECK(result.get("port").as<int>() == 9090);
+}
+
+TEST_CASE("Case-insensitive: strict mode still rejects unknown keys", "[schema][case]") {
+    cord::Schema schema;
+    schema.setCaseInsensitive(true);
+    schema.setStrict(true);
+    schema.add<int>("port");
+
+    auto result = schema.parse("PORT = 8080\nunknown = 1");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("unknown") != std::string::npos);
+    CHECK(result.get("port").as<int>() == 8080);
+}
+
 TEST_CASE("Empty delimiter throws", "[schema]") {
     cord::Schema schema;
     CHECK_THROWS_AS(schema.setDelimiter(""), cord::CordException);

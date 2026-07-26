@@ -128,6 +128,9 @@ schema.setAllowComments(true);
 // Strict mode: reject unknown keys (disabled by default)
 schema.setStrict(true);
 
+// Case-insensitive key matching: "PORT" matches field "port" (disabled by default)
+schema.setCaseInsensitive(true);
+
 // Custom delimiter (default: "=")
 schema.setDelimiter(':');    // single char
 schema.setDelimiter("==");  // or multi-char string
