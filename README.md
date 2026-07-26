@@ -136,7 +136,8 @@ schema.setDelimiter("==");  // or multi-char string
 schema.setCommentMarker(';');   // single char
 schema.setCommentMarker("//"); // or multi-char string
 
-// Print schema as a C-style struct (useful for debugging)
+// Print schema fields with types, modifiers, and constraints
+// Groups by type family when field count exceeds 10
 schema.describe();
 ```
 
