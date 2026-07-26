@@ -73,7 +73,7 @@ See the [`examples/`](examples/) directory for source:
 - **[simplest](examples/simplest/)**: Primitives, required fields, defaults
 - **[arrays](examples/arrays/)**: Vector support with `[]` syntax
 - **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
-- **[optionals](examples/optionals/)**: Safe optional field retrieval with `get_or()`
+- **[optionals](examples/optionals/)**: Safe optional field retrieval with `contains()` and `get_or()`
 
 ## Building & Testing
 
@@ -155,6 +155,9 @@ if (result.hasErrors()) {
 ### Value Access
 
 ```cpp
+// Check if a key is present (parsed value or default)
+bool exists = result.contains("port");
+
 // Get and convert, throws CordException if key missing or type wrong
 int port         = result.get("port").as<int>();
 std::string host = result.get("host").as<std::string>();

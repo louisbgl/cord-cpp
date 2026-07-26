@@ -15,16 +15,18 @@ int main() {
 
         std::string env = result.get("env").as<std::string>();
 
-        // Say port depends on env being prod or something else
-        // int port = result.get("port").as<int>();
-        // ^ will throw if port is not in the config file
-        // Instead, use get_or() to provide a potentially dynamic fallback value
-        // Useful if a config value isnt required but depends on another value in the config file
-        int port = result.get_or("port", env == "prod" ? 443 : 8080).as<int>();
-
-        std::cout << "port: " << port << std::endl;
-        std::cout << "env: "  << env  << std::endl;
+        // contains() checks if a key is present in the result (parsed or default)
+        // Useful when presence itself carries meaning
+        if (result.contains("port")) {
+            std::cout << "port: " << result.get("port").as<int>() << std::endl;
+        } else {
+            // get_or() for a runtime fallback when the key is absent
+            int port = result.get_or("port", env == "prod" ? 443 : 8080).as<int>();
+            std::cout << "port: " << port << " (default for env=" << env << ")" << std::endl;
         }
+
+        std::cout << "env: " << env << std::endl;
+    }
 
     return 0;
 }

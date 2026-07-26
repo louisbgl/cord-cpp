@@ -82,6 +82,27 @@ TEST_CASE("Lenient mode ignores unknown keys", "[schema]") {
     CHECK(result.get("port").as<int>() == 8080);
 }
 
+TEST_CASE("contains() returns true for present key", "[schema]") {
+    cord::Schema schema;
+    schema.add<int>("port");
+    schema.add<std::string>("host").default_("localhost");
+
+    auto result = schema.parse("port = 8080");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.contains("port"));
+    CHECK(result.contains("host")); // from default
+    CHECK_FALSE(result.contains("unknown"));
+}
+
+TEST_CASE("contains() returns false for absent optional field", "[schema]") {
+    cord::Schema schema;
+    schema.add<int>("port");
+
+    auto result = schema.parse("");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK_FALSE(result.contains("port"));
+}
+
 TEST_CASE("Empty delimiter throws", "[schema]") {
     cord::Schema schema;
     CHECK_THROWS_AS(schema.setDelimiter(""), cord::CordException);
