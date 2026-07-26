@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <iostream>
@@ -219,43 +220,66 @@ public:
 
     // Prints to std::cout a C-style struct representation of the schema
     void describe() const {
-        std::cout << "Schema {" << std::endl;
+        static constexpr size_t GROUP_THRESHOLD = 10;
 
-        for (const auto& field : _fields) {
-            switch (field->getType()) {
-                case FieldType::BOOL:
-                    std::cout << "  bool " << field->getName(); break;
-                case FieldType::INT:
-                    std::cout << "  int " << field->getName(); break;
-                case FieldType::FLOAT:
-                    std::cout << "  float " << field->getName(); break;
-                case FieldType::DOUBLE:
-                    std::cout << "  double " << field->getName(); break;
-                case FieldType::STRING:
-                    std::cout << "  string " << field->getName(); break;
-                case FieldType::VECTOR_BOOL:
-                    std::cout << "  vector<bool> " << field->getName(); break;
-                case FieldType::VECTOR_INT:
-                    std::cout << "  vector<int> " << field->getName(); break;
-                case FieldType::VECTOR_FLOAT:
-                    std::cout << "  vector<float> " << field->getName(); break;
-                case FieldType::VECTOR_DOUBLE:
-                    std::cout << "  vector<double> " << field->getName(); break;
-                case FieldType::VECTOR_STRING:
-                    std::cout << "  vector<string> " << field->getName(); break;
-            }
-
-            if (field->hasDefault()) {
-                std::cout << " (default = " << field->getDefault().toString() << ")";
-            }
-
-            if (field->isRequired()) {
-                std::cout << " (required)";
-            }
-
-            std::cout << std::endl;
+        size_t max_type_len = 0;
+        size_t max_name_len = 0;
+        for (const auto& f : _fields) {
+            max_type_len = std::max(max_type_len, fieldTypeName(f->getType()).size());
+            max_name_len = std::max(max_name_len, f->getName().size());
         }
-        std::cout << "}" << std::endl;
+
+        auto print_field = [&](const std::unique_ptr<IField>& f) {
+            std::string type = fieldTypeName(f->getType());
+            std::string name = f->getName();
+            std::cout << "  " << type << std::string(max_type_len - type.size() + 2, ' ');
+            std::cout << name;
+
+            std::string modifier;
+            if (f->isRequired())      modifier = "(required)";
+            else if (f->hasDefault()) modifier = "(default=" + f->getDefault().toString() + ")";
+
+            if (!modifier.empty()) {
+                std::cout << std::string(max_name_len - name.size() + 2, ' ') << modifier;
+            }
+
+            std::string constraints = f->describeConstraints();
+            if (!constraints.empty()) {
+                size_t mod_pad = modifier.empty() ? max_name_len - name.size() + 2 : 2;
+                std::cout << std::string(mod_pad, ' ') << constraints;
+            }
+
+            std::cout << "\n";
+        };
+
+        std::cout << "Schema {\n";
+
+        if (_fields.size() <= GROUP_THRESHOLD) {
+            for (const auto& f : _fields) print_field(f);
+        } else {
+            static const std::vector<std::vector<FieldType>> groups = {
+                { FieldType::INT, FieldType::FLOAT, FieldType::DOUBLE },
+                { FieldType::BOOL },
+                { FieldType::STRING },
+                { FieldType::VECTOR_INT, FieldType::VECTOR_FLOAT, FieldType::VECTOR_DOUBLE, FieldType::VECTOR_BOOL, FieldType::VECTOR_STRING },
+            };
+
+            bool first_group = true;
+            for (const auto& group : groups) {
+                bool printed_any = false;
+                for (FieldType type : group) {
+                    for (const auto& f : _fields) {
+                        if (f->getType() != type) continue;
+                        if (!printed_any && !first_group) std::cout << "\n";
+                        print_field(f);
+                        printed_any = true;
+                    }
+                }
+                if (printed_any) first_group = false;
+            }
+        }
+
+        std::cout << "}\n";
     }
 
     /**
