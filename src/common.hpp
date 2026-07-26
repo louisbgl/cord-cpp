@@ -3,6 +3,7 @@
 #include <cctype>
 #include <string>
 #include <vector>
+#include <optional>
 #include <type_traits>
 
 namespace cord {
