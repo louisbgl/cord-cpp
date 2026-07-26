@@ -12,6 +12,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <source_location>
 #include <cassert>
 
 #include "common.hpp"
@@ -42,12 +43,13 @@ public:
      *
      * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
      */
-    const Value& get(std::string_view key) const {
+    const Value& get(std::string_view key,
+                     std::source_location loc = std::source_location::current()) const {
         auto it = _values.find(std::string(key));
         if (it != _values.end()) {
             return it->second;
         } else {
-            throw CordException("Key not found: " + std::string(key));
+            throw CordException(loc.file_name(), loc.line(), "Key not found: " + std::string(key));
         }
     }
 
@@ -111,7 +113,6 @@ public:
      * @brief Parses the input string according to the schema.
      * @param input The input string to parse.
      * @return A Result object containing the parsed values and any errors.
-     * @throws CordException if the schema is not properly configured.
      */
     Result parse(const std::string_view input) {
         Result result;
@@ -335,9 +336,10 @@ public:
      *
      * @note "=" is the default.
      */
-    void setDelimiter(const std::string& delimiter) {
+    void setDelimiter(const std::string& delimiter,
+                      std::source_location loc = std::source_location::current()) {
         if (delimiter.empty()) {
-            throw CordException("Delimiter cannot be empty");
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
         }
         _delimiter = delimiter;
     }
@@ -354,9 +356,10 @@ public:
      *
      * @note "#" is the default.
      */
-    void setCommentMarker(const std::string& marker) {
+    void setCommentMarker(const std::string& marker,
+                          std::source_location loc = std::source_location::current()) {
         if (marker.empty()) {
-            throw CordException("Comment marker cannot be empty");
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
         }
         _comment_marker = marker;
     }

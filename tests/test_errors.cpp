@@ -47,5 +47,5 @@ TEST_CASE("No errors on valid input", "[errors]") {
 
 TEST_CASE("CordException::what() returns message", "[errors]") {
     cord::CordException ex("something went wrong");
-    CHECK(std::string(ex.what()) == "something went wrong");
+    CHECK(std::string(ex.what()) == "[CORD] something went wrong");
 }
