@@ -165,6 +165,7 @@ public:
     virtual bool hasDefault() const = 0;
     virtual Value getDefault() const = 0;
     virtual bool isRequired() const = 0;
+    virtual std::optional<std::string> checkConstraints(const Value& value) const = 0;
 };
 
 /**
@@ -208,6 +209,17 @@ public:
         return _required;
     }
 
+    std::optional<std::string> checkConstraints(const Value& value) const override {
+        if constexpr (is_numeric_type_v<T>) {
+            T v = value.as<T>();
+            if (_min_value.has_value() && v < *_min_value)
+                return "value " + std::to_string(v) + " is below minimum " + std::to_string(*_min_value);
+            if (_max_value.has_value() && v > *_max_value)
+                return "value " + std::to_string(v) + " exceeds maximum " + std::to_string(*_max_value);
+        }
+        return std::nullopt;
+    }
+
     // Marks the field as required
     Field<T>& required() {
         if (_default_value.has_value())
@@ -224,10 +236,38 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Sets the minimum allowed value for the field.
+     * @param val The minimum value (inclusive).
+     * @return Reference to this field for chaining.
+     *
+     * @note Only supported for numeric types (int, float, double).
+     */
+    Field<T>& min(T val) {
+        static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        _min_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum allowed value for the field.
+     * @param val The maximum value (inclusive).
+     * @return Reference to this field for chaining.
+     *
+     * @note Only supported for numeric types (int, float, double).
+     */
+    Field<T>& max(T val) {
+        static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        _max_value = val;
+        return *this;
+    }
+
 private:
     std::string _name;
     std::optional<T> _default_value = std::nullopt;
     bool _required = false;
+    std::optional<T> _min_value = std::nullopt;
+    std::optional<T> _max_value = std::nullopt;
 };
 
 } // namespace cord

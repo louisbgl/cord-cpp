@@ -194,6 +194,8 @@ public:
 
             if (!parsed) {
                 result._ec.addError("Failed to parse value for key: " + std::string(key));
+            } else {
+                checkFieldConstraints(result, field, i + 1);
             }
         }
 
@@ -329,6 +331,14 @@ private:
     bool _allow_comments = true;
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
+
+    void checkFieldConstraints(Result& result, IField* field, size_t line) const {
+        auto it = result._values.find(field->getName());
+        if (it == result._values.end()) return;
+        auto err = field->checkConstraints(it->second);
+        if (err.has_value())
+            result._ec.addError("Constraint violation for '" + field->getName() + "': " + *err, field->getName(), line);
+    }
 
     void ensureRequiredFieldsPresent(Result& result) const {
         for (const auto& field : _fields) {

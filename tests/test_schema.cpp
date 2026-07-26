@@ -112,3 +112,80 @@ TEST_CASE("Empty comment marker throws", "[schema]") {
     cord::Schema schema;
     CHECK_THROWS_AS(schema.setCommentMarker(""), cord::CordException);
 }
+
+TEST_CASE("min() enforced for int", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("port").min(1024);
+
+    auto ok = schema.parse("port = 8080");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("port = 80");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("below minimum") != std::string::npos);
+}
+
+TEST_CASE("max() enforced for int", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("port").max(65535);
+
+    auto ok = schema.parse("port = 8080");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("port = 99999");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("exceeds maximum") != std::string::npos);
+}
+
+TEST_CASE("min() and max() combined for int", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("port").min(1024).max(65535);
+
+    CHECK_FALSE(schema.parse("port = 8080").hasErrors());
+    CHECK(schema.parse("port = 80").hasErrors());
+    CHECK(schema.parse("port = 99999").hasErrors());
+}
+
+TEST_CASE("min() enforced for float", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<float>("ratio").min(0.0f).max(1.0f);
+
+    CHECK_FALSE(schema.parse("ratio = 0.5").hasErrors());
+    CHECK(schema.parse("ratio = -0.1").hasErrors());
+    CHECK(schema.parse("ratio = 1.1").hasErrors());
+}
+
+TEST_CASE("min() enforced for double", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<double>("threshold").min(0.0).max(100.0);
+
+    CHECK_FALSE(schema.parse("threshold = 50.0").hasErrors());
+    CHECK(schema.parse("threshold = -1.0").hasErrors());
+    CHECK(schema.parse("threshold = 101.0").hasErrors());
+}
+
+TEST_CASE("min() only, no max", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("workers").min(1);
+
+    CHECK_FALSE(schema.parse("workers = 8").hasErrors());
+    CHECK(schema.parse("workers = 0").hasErrors());
+}
+
+TEST_CASE("max() only, no min", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("retries").max(10);
+
+    CHECK_FALSE(schema.parse("retries = 3").hasErrors());
+    CHECK(schema.parse("retries = 11").hasErrors());
+}
+
+TEST_CASE("constraint error includes line number", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<int>("port").min(1024);
+
+    auto result = schema.parse("port = 80");
+    REQUIRE(result.hasErrors());
+    REQUIRE(result.getErrors()[0].line.has_value());
+    CHECK(result.getErrors()[0].line.value() == 1);
+}
