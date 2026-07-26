@@ -49,3 +49,12 @@ TEST_CASE("CordException::what() returns message", "[errors]") {
     cord::CordException ex("something went wrong");
     CHECK(std::string(ex.what()) == "[CORD] something went wrong");
 }
+
+TEST_CASE("CordException with file and line formats correctly", "[errors]") {
+    cord::CordException ex("myfile.cpp", 42, "something went wrong");
+    std::string msg = ex.what();
+    CHECK(msg.find("[CORD]") != std::string::npos);
+    CHECK(msg.find("myfile.cpp") != std::string::npos);
+    CHECK(msg.find("42") != std::string::npos);
+    CHECK(msg.find("something went wrong") != std::string::npos);
+}
