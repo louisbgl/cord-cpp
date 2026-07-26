@@ -67,6 +67,7 @@ cmake --build build --target run_simplest
 cmake --build build --target run_arrays
 cmake --build build --target run_optionals
 cmake --build build --target run_config_markers
+cmake --build build --target run_constraints
 ```
 
 See the [`examples/`](examples/) directory for source:
@@ -74,6 +75,7 @@ See the [`examples/`](examples/) directory for source:
 - **[arrays](examples/arrays/)**: Vector support with `[]` syntax
 - **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
 - **[optionals](examples/optionals/)**: Safe optional field retrieval with `contains()` and `get_or()`
+- **[constraints](examples/constraints/)**: Numeric range with `min()`/`max()` and choice validation with `oneOf()`
 
 ## Building & Testing
 
