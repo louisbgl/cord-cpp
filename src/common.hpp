@@ -12,6 +12,17 @@ namespace cord {
     "[CORD] Supported types: bool, int, float, double, std::string, " \
     "std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
 
+// Error message macro for static_assert failures on non-numeric types
+#define CORD_NUMERIC_ONLY(context) \
+    "\n\n[CORD] " context " is only supported for numeric types (int, float, double)\n"
+
+// Type trait to check if T is a numeric cord type (eligible for min/max)
+template<typename T>
+constexpr bool is_numeric_type_v =
+    std::is_same_v<T, int> ||
+    std::is_same_v<T, float> ||
+    std::is_same_v<T, double>;
+
 // Type trait to check if T is a supported cord type
 // Also supports const char* and char* for convenience in result.get_or()
 template<typename T>

@@ -32,7 +32,7 @@ include(Catch)
 catch_discover_tests(cord_tests)
 
 # Compile-fail tests: verify unsupported types are rejected at compile time
-foreach(CF_TEST test_type_assertions test_get_or_type_safety)
+foreach(CF_TEST test_type_assertions test_get_or_type_safety test_min_type_safety test_max_type_safety)
     try_compile(
         COMPILED_${CF_TEST}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/${CF_TEST}.cpp
