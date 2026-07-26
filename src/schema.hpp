@@ -28,6 +28,11 @@ class Result {
 friend class Schema;
 
 public:
+    // Checks if a key exists in the result.
+    bool contains(std::string_view key) const {
+        return _values.find(std::string(key)) != _values.end();
+    }
+
     /**
      * @brief Gets the value associated with a key.
      * @param key The key to look up.
