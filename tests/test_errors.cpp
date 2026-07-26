@@ -8,7 +8,7 @@ TEST_CASE("getErrors returns structured error info", "[errors]") {
     auto result = schema.parse("port = \"not_a_number\"");
     REQUIRE(result.hasErrors());
 
-    auto& errors = result.getErrors();
+    auto errors = result.getErrors();
     REQUIRE_FALSE(errors.empty());
     CHECK_FALSE(errors[0].message.empty());
 }
@@ -20,7 +20,7 @@ TEST_CASE("Error includes line number", "[errors]") {
     auto result = schema.parse("port = 8080\nbad_line_no_delimiter");
     REQUIRE(result.hasErrors());
 
-    auto& errors = result.getErrors();
+    auto errors = result.getErrors();
     REQUIRE_FALSE(errors.empty());
     REQUIRE(errors[0].line.has_value());
     CHECK(errors[0].line.value() == 2);
@@ -57,4 +57,43 @@ TEST_CASE("CordException with file and line formats correctly", "[errors]") {
     CHECK(msg.find("myfile.cpp") != std::string::npos);
     CHECK(msg.find("42") != std::string::npos);
     CHECK(msg.find("something went wrong") != std::string::npos);
+}
+
+TEST_CASE("Multiple missing required fields consolidated into one error", "[errors]") {
+    cord::Schema schema;
+    schema.add<int>("port").required();
+    schema.add<std::string>("host").required();
+    schema.add<bool>("debug").required();
+
+    auto result = schema.parse("");
+    REQUIRE(result.hasErrors());
+    auto errors = result.getErrors();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].message.find("port") != std::string::npos);
+    CHECK(errors[0].message.find("host") != std::string::npos);
+    CHECK(errors[0].message.find("debug") != std::string::npos);
+}
+
+TEST_CASE("Required fields error printed before parse errors", "[errors]") {
+    cord::Schema schema;
+    schema.setStrict(true);
+    schema.add<int>("port").required();
+
+    auto result = schema.parse("unknown = 1");
+    REQUIRE(result.hasErrors());
+    auto errors = result.getErrors();
+    REQUIRE(errors.size() >= 2);
+    CHECK(errors[0].message.find("port") != std::string::npos);  // required first
+}
+
+TEST_CASE("Unknown key in strict mode includes line number", "[errors]") {
+    cord::Schema schema;
+    schema.setStrict(true);
+    schema.add<int>("port");
+
+    auto result = schema.parse("port = 8080\nbad_key = 1");
+    REQUIRE(result.hasErrors());
+    auto errors = result.getErrors();
+    REQUIRE(errors[0].line.has_value());
+    CHECK(errors[0].line.value() == 2);
 }

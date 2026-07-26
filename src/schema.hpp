@@ -77,28 +77,30 @@ public:
         return _ec.hasErrors();
     }
 
-    const std::vector<ParseError>& getErrors() const {
-        return _ec.getErrors();
-    }
-
-    // Prints all parsing errors to std::cerr
+    // Prints all errors to std::cerr, with file and line context where available.
     void printErrors() const {
         for (const auto& error : _ec.getErrors()) {
-            std::cerr << "Error";
+            std::cerr << "[CORD] ";
 
-            if (error.line.has_value()) std::cerr << " line " << error.line.value() << ": ";
-            else std::cerr << ": ";
+            if (!_filepath.empty() && error.line.has_value())
+                std::cerr << _filepath << ":" << error.line.value() << ": ";
+            else if (!_filepath.empty())
+                std::cerr << _filepath << ": ";
+            else if (error.line.has_value())
+                std::cerr << "Line " << error.line.value() << ": ";
 
-            std::cerr << error.message;
-
-            if (error.key.has_value()) std::cerr << " (key: " << error.key.value() << ")";
-            std::cerr << std::endl;
+            std::cerr << error.message << "\n";
         }
+    }
+
+    const std::vector<ParseError> getErrors() const {
+        return _ec.getErrors();
     }
 
 private:
     std::unordered_map<std::string, Value> _values;
     ErrorCollector _ec;
+    std::string _filepath;
 };
 
 /**
@@ -116,6 +118,7 @@ public:
      */
     Result parse(const std::string_view input) {
         Result result;
+        result._filepath = _filepath;
 
         // split input into lines
         std::vector<std::string_view> lines;
@@ -159,7 +162,7 @@ public:
             }
 
             if (!field) {
-                if (_strict) result._ec.addError("Unknown key: " + std::string(key));
+                if (_strict) result._ec.addError("Unknown key: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
 
@@ -214,9 +217,11 @@ public:
 
     // Thin wrapper around parse() for convenience
     Result parseFile(const std::string& filename) {
+        _filepath = filename;
         std::ifstream file(filename);
         if (!file.is_open()) {
             Result result;
+            result._filepath = _filepath;
             result._ec.addError("Failed to open file: " + filename);
             return result;
         }
@@ -371,6 +376,7 @@ private:
     bool _case_insensitive = false;
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
+    std::string _filepath;
 
     void checkFieldConstraints(Result& result, IField* field, size_t line) const {
         auto it = result._values.find(field->getName());
@@ -384,7 +390,7 @@ private:
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (field->isRequired() && result._values.find(name) == result._values.end()) {
-                result._ec.addError("Missing required field: " + name);
+                result._ec.addMissingRequiredKey(name);
             }
         }
     }

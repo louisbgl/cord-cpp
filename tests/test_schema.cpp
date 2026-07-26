@@ -30,7 +30,7 @@ TEST_CASE("Required field missing produces error", "[schema]") {
 
     auto result = schema.parse("host = \"example.com\"");
     REQUIRE(result.hasErrors());
-    auto& errors = result.getErrors();
+    auto errors = result.getErrors();
     REQUIRE_FALSE(errors.empty());
     CHECK(errors[0].message.find("port") != std::string::npos);
 }
@@ -67,7 +67,7 @@ TEST_CASE("Strict mode rejects unknown keys", "[schema]") {
 
     auto result = schema.parse("port = 8080\nunknown_key = 123");
     REQUIRE(result.hasErrors());
-    auto& errors = result.getErrors();
+    auto errors = result.getErrors();
     REQUIRE_FALSE(errors.empty());
     CHECK(errors[0].message.find("unknown_key") != std::string::npos);
 }

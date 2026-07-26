@@ -121,7 +121,7 @@ TEST_CASE("Missing delimiter error", "[parsing]") {
 
     auto result = schema.parse("port = 8080\nthis_has_no_equals");
     REQUIRE(result.hasErrors());
-    auto& errors = result.getErrors();
+    auto errors = result.getErrors();
     REQUIRE_FALSE(errors.empty());
     CHECK(errors[0].message.find("delimiter") != std::string::npos);
 }
