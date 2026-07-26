@@ -107,7 +107,6 @@ inline std::string fieldTypeName(FieldType type) {
         case FieldType::VECTOR_FLOAT:  return "vector<float>";
         case FieldType::VECTOR_DOUBLE: return "vector<double>";
         case FieldType::VECTOR_STRING: return "vector<string>";
-        default:                       return "unknown";
     }
 }
 
