@@ -6,6 +6,13 @@
 
 namespace cord {
 
+template<typename T>
+struct ParseResult {
+    std::optional<T> value;
+    std::string error = "";
+};
+
+
 // Error message macro for static_assert failures on unsupported types
 #define CORD_UNSUPPORTED_TYPE(context) \
     "\n\n[CORD] Unsupported type for " context "\n" \
@@ -108,6 +115,7 @@ inline std::string fieldTypeName(FieldType type) {
         case FieldType::VECTOR_DOUBLE: return "vector<double>";
         case FieldType::VECTOR_STRING: return "vector<string>";
     }
+    return "unknown"; // unreachable
 }
 
 } // namespace cord

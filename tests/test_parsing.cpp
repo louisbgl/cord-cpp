@@ -151,3 +151,53 @@ TEST_CASE("get() throws on missing key", "[parsing]") {
     auto result = schema.parse("");
     CHECK_THROWS_AS(result.get("port"), cord::CordException);
 }
+
+TEST_CASE("String escape sequences parsed correctly", "[parsing][escape]") {
+    cord::Schema schema;
+    schema.add<std::string>("a");
+    schema.add<std::string>("b");
+    schema.add<std::string>("c");
+    schema.add<std::string>("d");
+
+    auto result = schema.parse(R"(
+a = "hello \"world\""
+b = "line1\nline2"
+c = "col1\tcol2"
+d = "back\\slash"
+)");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("a").as<std::string>() == "hello \"world\"");
+    CHECK(result.get("b").as<std::string>() == "line1\nline2");
+    CHECK(result.get("c").as<std::string>() == "col1\tcol2");
+    CHECK(result.get("d").as<std::string>() == "back\\slash");
+}
+
+TEST_CASE("Unknown escape sequence produces error", "[parsing][escape]") {
+    cord::Schema schema;
+    schema.add<std::string>("val");
+
+    auto result = schema.parse(R"(val = "bad\qescape")");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("unknown escape sequence") != std::string::npos);
+}
+
+TEST_CASE("Unquoted string produces error with reason", "[parsing][escape]") {
+    cord::Schema schema;
+    schema.add<std::string>("val");
+
+    auto result = schema.parse("val = notquoted");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("quoted") != std::string::npos);
+}
+
+TEST_CASE("Escape sequences in vector strings", "[parsing][escape]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("tags");
+
+    auto result = schema.parse(R"(tags = ["hello\tworld", "line1\nline2", "quo\"ted"])");
+    REQUIRE_FALSE(result.hasErrors());
+    auto tags = result.get("tags").as<std::vector<std::string>>();
+    CHECK(tags[0] == "hello\tworld");
+    CHECK(tags[1] == "line1\nline2");
+    CHECK(tags[2] == "quo\"ted");
+}

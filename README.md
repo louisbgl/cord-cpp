@@ -19,7 +19,7 @@ Header-only C++20 configuration parser with schema validation and fluent API.
 
 - **Format:** `key = value` (one per line)
 - **Whitespace:** Trimmed around keys and values
-- **Strings:** Must be quoted with `""`
+- **Strings:** Must be quoted with `""`. Supported escapes: `\"`, `\\`, `\n`, `\t`
 - **Booleans:** `true` or `false`
 - **Numbers:** `123` (int), `3.14` (float/double)
 - **Vectors:** `[item1, item2, item3]` with square brackets
