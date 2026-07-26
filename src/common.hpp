@@ -14,6 +14,11 @@ struct ParseResult {
     std::string error = "";
 };
 
+struct VectorElements {
+    std::vector<std::string_view> items;
+    std::string error;
+};
+
 
 // Error message macro for static_assert failures on unsupported types
 #define CORD_UNSUPPORTED_TYPE(context) \

@@ -137,7 +137,7 @@ public:
 
             size_t delimiter_pos = trimmed_line.find(_delimiter);
             if (delimiter_pos == std::string_view::npos) {
-                result._ec.addError("Missing delimiter (" + std::string(_delimiter) + ") in line: " + std::string(lines[i]), std::nullopt, i + 1);
+                result._ec.addError("Missing delimiter (" + std::string(_delimiter) + ") on line: \"" + std::string(lines[i]) + "\"", std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
 
@@ -162,48 +162,38 @@ public:
             }
 
             if (!field) {
-                if (_strict) result._ec.addError("Unknown key: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
+                if (_strict) result._ec.addError("Unexpected key in strict mode: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
 
-            std::string parse_error;
-            auto tryParseAndStore = [&](auto tryParseFunc) -> bool {
-                auto res = (this->*tryParseFunc)(value_str);
-                if (res.value.has_value()) {
-                    result._values.insert_or_assign(field->getName(), Value(*res.value));
-                    return true;
-                }
-                parse_error = res.error;
-                return false;
-            };
-
             bool parsed = false;
+            std::string parse_error;
             switch (field->getType()) {
                 case FieldType::BOOL:
-                    parsed = tryParseAndStore(&Schema::_tryParseBool); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseBool); break;
                 case FieldType::STRING:
-                    parsed = tryParseAndStore(&Schema::_tryParseString); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseString); break;
                 case FieldType::INT:
-                    parsed = tryParseAndStore(&Schema::_tryParseInt); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseInt); break;
                 case FieldType::FLOAT:
-                    parsed = tryParseAndStore(&Schema::_tryParseFloat); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseFloat); break;
                 case FieldType::DOUBLE:
-                    parsed = tryParseAndStore(&Schema::_tryParseDouble); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseDouble); break;
                 case FieldType::VECTOR_BOOL:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorBool); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorBool); break;
                 case FieldType::VECTOR_INT:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorInt); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorInt); break;
                 case FieldType::VECTOR_FLOAT:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorFloat); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorFloat); break;
                 case FieldType::VECTOR_DOUBLE:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorDouble); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorDouble); break;
                 case FieldType::VECTOR_STRING:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorString); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorString); break;
             }
 
             if (!parsed) {
-                std::string msg = "Failed to parse value for key: " + std::string(key);
-                if (!parse_error.empty()) msg += " (" + parse_error + ")";
+                std::string msg = "Invalid value for '" + std::string(key) + "'";
+                if (!parse_error.empty()) msg += ": " + parse_error;
                 result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
             } else {
                 checkFieldConstraints(result, field, i + 1);
@@ -424,16 +414,29 @@ private:
         return s;
     }
 
+    template<typename T>
+    bool _tryParseAndStore(Result& result, IField* field, std::string_view value_str,
+                           std::string& parse_error,
+                           ParseResult<T> (Schema::*parse_fn)(std::string_view) const) const {
+        auto res = (this->*parse_fn)(value_str);
+        if (res.value.has_value()) {
+            result._values.insert_or_assign(field->getName(), Value(*res.value));
+            return true;
+        }
+        parse_error = res.error;
+        return false;
+    }
+
     ParseResult<int> _tryParseInt(const std::string_view str) const {
         try {
             size_t idx;
             int value = std::stoi(std::string(str), &idx);
-            if (idx != str.size()) return {{}, "got: \"" + std::string(str) + "\""};
+            if (idx != str.size()) return {{}, "\"" + std::string(str) + "\" is not a valid int"};
             return {value};
         } catch (const std::out_of_range&) {
             return {{}, "value out of range for int: \"" + std::string(str) + "\""};
         } catch (const std::invalid_argument&) {
-            return {{}, "got: \"" + std::string(str) + "\""};
+            return {{}, "\"" + std::string(str) + "\" is not a valid int"};
         }
     }
 
@@ -441,19 +444,26 @@ private:
         try {
             size_t idx;
             double value = std::stod(std::string(str), &idx);
-            if (idx != str.size()) return {{}, "got: \"" + std::string(str) + "\""};
+            if (idx != str.size()) return {{}, "\"" + std::string(str) + "\" is not a valid double"};
             return {value};
         } catch (const std::out_of_range&) {
             return {{}, "value out of range for double: \"" + std::string(str) + "\""};
         } catch (const std::invalid_argument&) {
-            return {{}, "got: \"" + std::string(str) + "\""};
+            return {{}, "\"" + std::string(str) + "\" is not a valid double"};
         }
     }
 
     ParseResult<float> _tryParseFloat(const std::string_view str) const {
-        auto res = _tryParseDouble(str);
-        if (!res.value.has_value()) return {{}, res.error};
-        return {static_cast<float>(*res.value)};
+        try {
+            size_t idx;
+            float value = std::stof(std::string(str), &idx);
+            if (idx != str.size()) return {{}, "\"" + std::string(str) + "\" is not a valid float"};
+            return {value};
+        } catch (const std::out_of_range&) {
+            return {{}, "value out of range for float: \"" + std::string(str) + "\""};
+        } catch (const std::invalid_argument&) {
+            return {{}, "\"" + std::string(str) + "\" is not a valid float"};
+        }
     }
 
     ParseResult<bool> _tryParseBool(const std::string_view str) const {
@@ -497,76 +507,52 @@ private:
         return result;
     }
 
-    std::optional<std::vector<std::string_view>> _extractVectorElements(std::string_view str) const {
-        if (str.empty() || str.front() != '[') return std::nullopt;
+    VectorElements _extractVectorElements(std::string_view str) const {
+        if (str.empty() || str.front() != '[')
+            return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
 
         size_t close_bracket = str.find(']');
-        if (close_bracket == std::string_view::npos) return std::nullopt;
+        if (close_bracket == std::string_view::npos)
+            return {{}, "missing closing ']' in vector value"};
 
         std::string_view inner = _trim(str.substr(1, close_bracket - 1));
-        if (inner.empty()) return std::vector<std::string_view>{};
+        if (inner.empty()) return {{}, ""};
 
-        return _splitCommas(inner);
+        return {_splitCommas(inner), ""};
+    }
+
+    template<typename T, typename ParseFn>
+    ParseResult<std::vector<T>> _tryParseVector(std::string_view str, ParseFn parse_elem) const {
+        auto extracted = _extractVectorElements(str);
+        if (!extracted.error.empty()) return {{}, extracted.error};
+        std::vector<T> result;
+        for (size_t idx = 0; idx < extracted.items.size(); ++idx) {
+            auto res = parse_elem(extracted.items[idx]);
+            if (!res.value.has_value())
+                return {{}, "element at index " + std::to_string(idx) + ": " + res.error};
+            result.push_back(*res.value);
+        }
+        return {result};
     }
 
     ParseResult<std::vector<bool>> _tryParseVectorBool(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<bool> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseBool(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<bool>(str, [this](std::string_view s) { return _tryParseBool(s); });
     }
 
     ParseResult<std::vector<int>> _tryParseVectorInt(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<int> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseInt(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<int>(str, [this](std::string_view s) { return _tryParseInt(s); });
     }
 
     ParseResult<std::vector<float>> _tryParseVectorFloat(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<float> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseFloat(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<float>(str, [this](std::string_view s) { return _tryParseFloat(s); });
     }
 
     ParseResult<std::vector<double>> _tryParseVectorDouble(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<double> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseDouble(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<double>(str, [this](std::string_view s) { return _tryParseDouble(s); });
     }
 
     ParseResult<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<std::string> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseString(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<std::string>(str, [this](std::string_view s) { return _tryParseString(s); });
     }
 };
 
