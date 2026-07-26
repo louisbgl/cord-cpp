@@ -11,7 +11,7 @@ Header-only C++20 configuration parser with schema validation and fluent API.
 
 - **Header-only**: zero dependencies
 - **Type-safe**: compile-time checks via `static_assert`
-- **Fluent API**: chain `.required()`, `.default_()`
+- **Fluent API**: chain `.required()`, `.default_()`, `.min()`, `.max()`, `.oneOf()`
 - **Error accumulation**: collect and inspect all errors at once
 - **Strict/lenient modes**: reject or ignore unknown keys
 
@@ -67,6 +67,7 @@ cmake --build build --target run_simplest
 cmake --build build --target run_arrays
 cmake --build build --target run_optionals
 cmake --build build --target run_config_markers
+cmake --build build --target run_constraints
 ```
 
 See the [`examples/`](examples/) directory for source:
@@ -74,6 +75,7 @@ See the [`examples/`](examples/) directory for source:
 - **[arrays](examples/arrays/)**: Vector support with `[]` syntax
 - **[config_markers](examples/config_markers/)**: Custom delimiters and comment markers
 - **[optionals](examples/optionals/)**: Safe optional field retrieval with `contains()` and `get_or()`
+- **[constraints](examples/constraints/)**: Numeric range with `min()`/`max()` and choice validation with `oneOf()`
 
 ## Building & Testing
 
@@ -112,6 +114,14 @@ schema.add<int>("port").required();
 // Set default value (used when key is absent)
 schema.add<std::string>("host").default_("localhost");
 
+// Numeric range constraints (int, float, double only)
+schema.add<int>("port").min(1024).max(65535);
+schema.add<float>("ratio").min(0.0f).max(1.0f);
+
+// Restrict to a set of allowed values
+schema.add<std::string>("level").oneOf({"debug", "info", "warn", "error"});
+schema.add<int>("verbosity").oneOf({0, 1, 2, 3});
+
 // Comments (enabled by default)
 schema.setAllowComments(true);
 
@@ -126,7 +136,8 @@ schema.setDelimiter("==");  // or multi-char string
 schema.setCommentMarker(';');   // single char
 schema.setCommentMarker("//"); // or multi-char string
 
-// Print schema as a C-style struct (useful for debugging)
+// Print schema fields with types, modifiers, and constraints
+// Groups by type family when field count exceeds 10
 schema.describe();
 ```
 

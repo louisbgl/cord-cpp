@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <initializer_list>
 #include <string>
 #include <variant>
 #include <vector>
@@ -10,22 +12,6 @@
 #include "exception.hpp"
 
 namespace cord {
-
-/**
-* @brief Enum representing the supported field types in the schema.
-*/
-enum class FieldType {
-    BOOL,
-    INT,
-    FLOAT,
-    DOUBLE,
-    STRING,
-    VECTOR_BOOL,
-    VECTOR_INT,
-    VECTOR_FLOAT,
-    VECTOR_DOUBLE,
-    VECTOR_STRING
-};
 
 /**
 * @brief Helper function to get the FieldType from a C++ type.
@@ -113,35 +99,17 @@ public:
      * @throws CordException if the type is unknown.
      */
     std::string toString() const {
-        // lambda to convert vector to string
-        auto vectorToString = [](const auto& vec) -> std::string {
-            using Elem = typename std::decay_t<decltype(vec)>::value_type;
-            std::string result = "[";
-            for (size_t i = 0; i < vec.size(); ++i) {
-                if constexpr (std::is_same_v<Elem, std::string>) {
-                    result += "\"" + vec[i] + "\"";
-                } else if constexpr (std::is_same_v<Elem, bool>) {
-                    result += vec[i] ? "true" : "false";
-                } else {
-                    result += std::to_string(vec[i]);
-                }
-                if (i < vec.size() - 1) result += ", ";
-            }
-            result += "]";
-            return result;
-        };
-
         switch (_value.index()) {
-            case 0: return std::get<bool>(_value) ? "true" : "false";
-            case 1: return std::to_string(std::get<int>(_value));
-            case 2: return std::to_string(std::get<float>(_value));
-            case 3: return std::to_string(std::get<double>(_value));
-            case 4: return "\"" + std::get<std::string>(_value) + "\"";
-            case 5: return vectorToString(std::get<std::vector<bool>>(_value));
-            case 6: return vectorToString(std::get<std::vector<int>>(_value));
-            case 7: return vectorToString(std::get<std::vector<float>>(_value));
-            case 8: return vectorToString(std::get<std::vector<double>>(_value));
-            case 9: return vectorToString(std::get<std::vector<std::string>>(_value));
+            case 0: return valueToString(std::get<bool>(_value));
+            case 1: return valueToString(std::get<int>(_value));
+            case 2: return valueToString(std::get<float>(_value));
+            case 3: return valueToString(std::get<double>(_value));
+            case 4: return valueToString(std::get<std::string>(_value));
+            case 5: return valueToString(std::get<std::vector<bool>>(_value));
+            case 6: return valueToString(std::get<std::vector<int>>(_value));
+            case 7: return valueToString(std::get<std::vector<float>>(_value));
+            case 8: return valueToString(std::get<std::vector<double>>(_value));
+            case 9: return valueToString(std::get<std::vector<std::string>>(_value));
             default: throw CordException("Unknown type");
         }
     }
@@ -166,6 +134,7 @@ public:
     virtual Value getDefault() const = 0;
     virtual bool isRequired() const = 0;
     virtual std::optional<std::string> checkConstraints(const Value& value) const = 0;
+    virtual std::string describeConstraints() const = 0;
 };
 
 /**
@@ -213,11 +182,46 @@ public:
         if constexpr (is_numeric_type_v<T>) {
             T v = value.as<T>();
             if (_min_value.has_value() && v < *_min_value)
-                return "value " + std::to_string(v) + " is below minimum " + std::to_string(*_min_value);
+                return "value " + valueToString(v) + " is below minimum " + valueToString(*_min_value);
             if (_max_value.has_value() && v > *_max_value)
-                return "value " + std::to_string(v) + " exceeds maximum " + std::to_string(*_max_value);
+                return "value " + valueToString(v) + " exceeds maximum " + valueToString(*_max_value);
+        }
+        if (_allowed_values.has_value()) {
+            T v = value.as<T>();
+            if (std::find(_allowed_values->begin(), _allowed_values->end(), v) == _allowed_values->end()) {
+                std::string v_str = valueToString(v);
+                return "value " + v_str + " is not in allowed values";
+            }
         }
         return std::nullopt;
+    }
+
+    std::string describeConstraints() const override {
+        std::string range;
+        std::string choices;
+
+        if constexpr (is_numeric_type_v<T>) {
+            if (_min_value.has_value() || _max_value.has_value()) {
+                range = "[";
+                range += _min_value.has_value() ? valueToString(*_min_value) : "";
+                range += "..";
+                range += _max_value.has_value() ? valueToString(*_max_value) : "";
+                range += "]";
+            }
+        }
+
+        if (_allowed_values.has_value()) {
+            choices = "[oneOf={";
+            for (size_t i = 0; i < _allowed_values->size(); ++i) {
+                choices += valueToString((*_allowed_values)[i]);
+                if (i < _allowed_values->size() - 1) choices += ", ";
+            }
+            choices += "}]";
+        }
+
+        if (!range.empty() && !choices.empty()) return range + "  " + choices;
+        if (!range.empty()) return range;
+        return choices;
     }
 
     // Marks the field as required
@@ -241,6 +245,7 @@ public:
      * @param val The minimum value (inclusive).
      * @return Reference to this field for chaining.
      *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
      * @note Only supported for numeric types (int, float, double).
      */
     Field<T>& min(T val) {
@@ -254,11 +259,25 @@ public:
      * @param val The maximum value (inclusive).
      * @return Reference to this field for chaining.
      *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
      * @note Only supported for numeric types (int, float, double).
      */
     Field<T>& max(T val) {
         static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
         _max_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the allowed values for the field.
+     * @param values The list of allowed values.
+     * @return Reference to this field for chaining.
+     *
+     * @note This method performs compile-time checks to ensure that the type T is supported.
+     */
+    Field<T>& oneOf(std::initializer_list<T> values) {
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("oneOf()"));
+        _allowed_values = std::vector<T>(values);
         return *this;
     }
 
@@ -268,6 +287,7 @@ private:
     bool _required = false;
     std::optional<T> _min_value = std::nullopt;
     std::optional<T> _max_value = std::nullopt;
+    std::optional<std::vector<T>> _allowed_values = std::nullopt;
 };
 
 } // namespace cord

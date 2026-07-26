@@ -33,6 +33,11 @@ int main() {
     schema.add<std::vector<int>>("trailingcomma").required();
     schema.add<std::vector<int>>("noclosing").required();
 
+    // Constraints
+    schema.add<int>("min").min(1);
+    schema.add<int>("max").max(9);
+    schema.add<std::string>("oneOf").oneOf({"a", "b", "c"});
+
     schema.describe();
     std::cout << std::endl;
 

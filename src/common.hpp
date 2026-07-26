@@ -54,4 +54,60 @@ constexpr bool is_supported_value_type_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
+// Converts any supported cord type to its string representation
+template<typename T>
+std::string valueToString(const T& val) {
+    if constexpr (std::is_same_v<T, bool>)
+        return val ? "true" : "false";
+    else if constexpr (std::is_same_v<T, std::string>)
+        return "\"" + val + "\"";
+    else if constexpr (is_numeric_type_v<T>)
+        return std::to_string(val);
+    else if constexpr (std::is_same_v<typename T::value_type, bool>)
+        // vector<bool> handled separately — operator[] returns proxy, not bool ref
+        return "[" + [&]{ std::string s; for (size_t i = 0; i < val.size(); ++i) { s += (val[i] ? "true" : "false"); if (i < val.size()-1) s += ", "; } return s; }() + "]";
+    else {
+        // vector<int/float/double/string>
+        using Elem = typename T::value_type;
+        std::string s = "[";
+        for (size_t i = 0; i < val.size(); ++i) {
+            s += valueToString<Elem>(val[i]);
+            if (i < val.size() - 1) s += ", ";
+        }
+        return s + "]";
+    }
+}
+
+/**
+ * @brief Enum representing the supported field types in the schema.
+ */
+enum class FieldType {
+    BOOL,
+    INT,
+    FLOAT,
+    DOUBLE,
+    STRING,
+    VECTOR_BOOL,
+    VECTOR_INT,
+    VECTOR_FLOAT,
+    VECTOR_DOUBLE,
+    VECTOR_STRING
+};
+
+// Returns the display name for a FieldType (used by Schema::describe())
+inline std::string fieldTypeName(FieldType type) {
+    switch (type) {
+        case FieldType::BOOL:          return "bool";
+        case FieldType::INT:           return "int";
+        case FieldType::FLOAT:         return "float";
+        case FieldType::DOUBLE:        return "double";
+        case FieldType::STRING:        return "string";
+        case FieldType::VECTOR_BOOL:   return "vector<bool>";
+        case FieldType::VECTOR_INT:    return "vector<int>";
+        case FieldType::VECTOR_FLOAT:  return "vector<float>";
+        case FieldType::VECTOR_DOUBLE: return "vector<double>";
+        case FieldType::VECTOR_STRING: return "vector<string>";
+    }
+}
+
 } // namespace cord
