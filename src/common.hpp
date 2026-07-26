@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <string>
 #include <vector>
 #include <type_traits>
@@ -100,6 +101,13 @@ enum class FieldType {
     VECTOR_DOUBLE,
     VECTOR_STRING
 };
+
+// Lowercases a string_view into a new std::string
+inline std::string toLower(std::string_view s) {
+    std::string out(s);
+    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
 
 // Returns the display name for a FieldType (used by Schema::describe())
 inline std::string fieldTypeName(FieldType type) {

@@ -148,10 +148,13 @@ public:
 
             IField* field = nullptr;
             for (const auto& f : _fields) {
-                if (f->getName() == key) {
-                    field = f.get();
-                    break;
+                if (_case_insensitive) {
+                    if (toLower(f->getName()) != toLower(key)) continue;
+                } else {
+                    if (f->getName() != key) continue;
                 }
+                field = f.get();
+                break;
             }
 
             if (!field) {
@@ -308,6 +311,12 @@ public:
         _strict = strict;
     }
 
+    // Enables case-insensitive key matching (e.g. "Port" matches field "port")
+    // Defaults to false
+    void setCaseInsensitive(bool enabled) {
+        _case_insensitive = enabled;
+    }
+
     // Sets whether comments are allowed in the input
     // Defaults to true
     void setAllowComments(bool allow) {
@@ -356,6 +365,7 @@ private:
     std::vector<std::unique_ptr<IField>> _fields;
     bool _strict = false;
     bool _allow_comments = true;
+    bool _case_insensitive = false;
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
 
