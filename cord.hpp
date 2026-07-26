@@ -23,8 +23,18 @@
     "\n\n[CORD] Unsupported type for " context "\n" \
     "[CORD] Supported types: bool, int, float, double, std::string, " \
     "std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
+// Error message macro for static_assert failures on non-numeric types
+#define CORD_NUMERIC_ONLY(context) \
+    "\n\n[CORD] " context " is only supported for numeric types (int, float, double)\n"
 
 namespace cord {
+
+// Type trait to check if T is a numeric cord type (eligible for min/max)
+template<typename T>
+constexpr bool is_numeric_type_v =
+    std::is_same_v<T, int> ||
+    std::is_same_v<T, float> ||
+    std::is_same_v<T, double>;
 
 // Type trait to check if T is a supported cord type
 // Also supports const char* and char* for convenience in result.get_or()
@@ -227,6 +237,7 @@ public:
     virtual bool hasDefault() const = 0;
     virtual Value getDefault() const = 0;
     virtual bool isRequired() const = 0;
+    virtual std::optional<std::string> checkConstraints(const Value& value) const = 0;
 };
 
 /**
@@ -270,6 +281,17 @@ public:
         return _required;
     }
 
+    std::optional<std::string> checkConstraints(const Value& value) const override {
+        if constexpr (is_numeric_type_v<T>) {
+            T v = value.as<T>();
+            if (_min_value.has_value() && v < *_min_value)
+                return "value " + std::to_string(v) + " is below minimum " + std::to_string(*_min_value);
+            if (_max_value.has_value() && v > *_max_value)
+                return "value " + std::to_string(v) + " exceeds maximum " + std::to_string(*_max_value);
+        }
+        return std::nullopt;
+    }
+
     // Marks the field as required
     Field<T>& required() {
         if (_default_value.has_value())
@@ -286,10 +308,38 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Sets the minimum allowed value for the field.
+     * @param val The minimum value (inclusive).
+     * @return Reference to this field for chaining.
+     *
+     * @note Only supported for numeric types (int, float, double).
+     */
+    Field<T>& min(T val) {
+        static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        _min_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum allowed value for the field.
+     * @param val The maximum value (inclusive).
+     * @return Reference to this field for chaining.
+     *
+     * @note Only supported for numeric types (int, float, double).
+     */
+    Field<T>& max(T val) {
+        static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        _max_value = val;
+        return *this;
+    }
+
 private:
     std::string _name;
     std::optional<T> _default_value = std::nullopt;
     bool _required = false;
+    std::optional<T> _min_value = std::nullopt;
+    std::optional<T> _max_value = std::nullopt;
 };
 
 /**
@@ -504,6 +554,8 @@ public:
 
             if (!parsed) {
                 result._ec.addError("Failed to parse value for key: " + std::string(key));
+            } else {
+                checkFieldConstraints(result, field, i + 1);
             }
         }
 
@@ -639,6 +691,14 @@ private:
     bool _allow_comments = true;
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
+
+    void checkFieldConstraints(Result& result, IField* field, size_t line) const {
+        auto it = result._values.find(field->getName());
+        if (it == result._values.end()) return;
+        auto err = field->checkConstraints(it->second);
+        if (err.has_value())
+            result._ec.addError("Constraint violation for '" + field->getName() + "': " + *err, field->getName(), line);
+    }
 
     void ensureRequiredFieldsPresent(Result& result) const {
         for (const auto& field : _fields) {
