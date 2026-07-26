@@ -33,7 +33,7 @@ TEST_CASE("parseFile missing file produces error", "[file]") {
 
     auto result = schema.parseFile("nonexistent_cord_test.conf");
     REQUIRE(result.hasErrors());
-    auto& errors = result.getErrors();
+    auto errors = result.getErrors();
     REQUIRE_FALSE(errors.empty());
     CHECK(errors[0].message.find("Failed to open file") != std::string::npos);
 }

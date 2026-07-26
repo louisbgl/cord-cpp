@@ -3,6 +3,7 @@
 #include <cctype>
 #include <string>
 #include <vector>
+#include <optional>
 #include <type_traits>
 
 namespace cord {
@@ -11,6 +12,11 @@ template<typename T>
 struct ParseResult {
     std::optional<T> value;
     std::string error = "";
+};
+
+struct VectorElements {
+    std::vector<std::string_view> items;
+    std::string error;
 };
 
 

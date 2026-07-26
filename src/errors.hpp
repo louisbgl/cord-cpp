@@ -20,28 +20,42 @@ struct ParseError {
  */
 class ErrorCollector {
 public:
-    // Adds a parsing error to the collector.
-    void addError(const ParseError& error) {
-        _errors.push_back(error);
-    }
-
-    // Adds a parsing error with a message, optional key, and optional line number.
+    // Adds a parse-time error with optional key and line number.
     void addError(const std::string& message, const std::optional<std::string>& key = std::nullopt, const std::optional<int>& line = std::nullopt) {
         _errors.push_back({message, key, line});
     }
 
-    // Returns the list of collected parsing errors.
-    const std::vector<ParseError>& getErrors() const {
-        return _errors;
+    // Records a missing required field by name. All missing fields are consolidated into one error.
+    void addMissingRequiredKey(const std::string& name) {
+        _missing_required.push_back(name);
     }
 
-    // Checks if there are any collected parsing errors.
+    /**
+     * @brief Returns all errors: consolidated required-fields error first, then parse errors in order.
+     * @return A vector of ParseError structs.
+     */
+    std::vector<ParseError> getErrors() const {
+        std::vector<ParseError> result;
+        if (!_missing_required.empty()) {
+            std::string msg = "missing required fields: ";
+            for (size_t i = 0; i < _missing_required.size(); ++i) {
+                msg += "'" + _missing_required[i] + "'";
+                if (i < _missing_required.size() - 1) msg += ", ";
+            }
+            result.push_back({msg, std::nullopt, std::nullopt});
+        }
+        result.insert(result.end(), _errors.begin(), _errors.end());
+        return result;
+    }
+
+    // Checks if there are any collected errors, including missing required fields.
     bool hasErrors() const {
-        return !_errors.empty();
+        return !_errors.empty() || !_missing_required.empty();
     }
 
 private:
     std::vector<ParseError> _errors;
+    std::vector<std::string> _missing_required;
 };
 
 } // namespace cord

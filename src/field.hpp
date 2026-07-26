@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <initializer_list>
+#include <source_location>
 #include <string>
 #include <variant>
 #include <vector>
@@ -63,12 +64,12 @@ public:
      * @note This method performs compile-time checks to ensure that the type T is supported.
      */
     template<typename T>
-    T as() const {
+    T as(std::source_location loc = std::source_location::current()) const {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         try {
             return std::get<T>(_value);
         } catch (const std::bad_variant_access&) {
-            throw CordException("Type mismatch in as<T>(): value holds a different type");
+            throw CordException(loc.file_name(), loc.line(), "Type mismatch in as<T>(): value holds a different type");
         }
     }
 
@@ -225,17 +226,17 @@ public:
     }
 
     // Marks the field as required
-    Field<T>& required() {
+    Field<T>& required(std::source_location loc = std::source_location::current()) {
         if (_default_value.has_value())
-            throw CordException("Field '" + _name + "' can't be both required and have a default value");
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
         _required = true;
         return *this;
     }
 
     // Sets the default value of the field
-    Field<T>& default_(T val) {
+    Field<T>& default_(T val, std::source_location loc = std::source_location::current()) {
         if (_required)
-            throw CordException("Field '" + _name + "' can't be both required and have a default value");
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
         _default_value = val;
         return *this;
     }
