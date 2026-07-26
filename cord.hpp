@@ -12,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -36,6 +37,11 @@ template<typename T>
 struct ParseResult {
     std::optional<T> value;
     std::string error = "";
+};
+
+struct VectorElements {
+    std::vector<std::string_view> items;
+    std::string error;
 };
 
 // Type trait to check if T is a numeric cord type (eligible for min/max)
@@ -146,7 +152,10 @@ inline std::string fieldTypeName(FieldType type) {
 class CordException : public std::exception {
 public:
     explicit CordException(const std::string& message)
-        : _message(message) {}
+        : _message("[CORD] " + message) {}
+
+    explicit CordException(const std::string& file, int line, const std::string& message)
+        : _message("[CORD] " + file + ":" + std::to_string(line) + ": " + message) {}
 
     const char* what() const noexcept override {
         return _message.c_str();
@@ -206,12 +215,12 @@ public:
      * @note This method performs compile-time checks to ensure that the type T is supported.
      */
     template<typename T>
-    T as() const {
+    T as(std::source_location loc = std::source_location::current()) const {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         try {
             return std::get<T>(_value);
         } catch (const std::bad_variant_access&) {
-            throw CordException("Type mismatch in as<T>(): value holds a different type");
+            throw CordException(loc.file_name(), loc.line(), "Type mismatch in as<T>(): value holds a different type");
         }
     }
 
@@ -368,17 +377,17 @@ public:
     }
 
     // Marks the field as required
-    Field<T>& required() {
+    Field<T>& required(std::source_location loc = std::source_location::current()) {
         if (_default_value.has_value())
-            throw CordException("Field '" + _name + "' can't be both required and have a default value");
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
         _required = true;
         return *this;
     }
 
     // Sets the default value of the field
-    Field<T>& default_(T val) {
+    Field<T>& default_(T val, std::source_location loc = std::source_location::current()) {
         if (_required)
-            throw CordException("Field '" + _name + "' can't be both required and have a default value");
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
         _default_value = val;
         return *this;
     }
@@ -447,28 +456,42 @@ struct ParseError {
  */
 class ErrorCollector {
 public:
-    // Adds a parsing error to the collector.
-    void addError(const ParseError& error) {
-        _errors.push_back(error);
-    }
-
-    // Adds a parsing error with a message, optional key, and optional line number.
+    // Adds a parse-time error with optional key and line number.
     void addError(const std::string& message, const std::optional<std::string>& key = std::nullopt, const std::optional<int>& line = std::nullopt) {
         _errors.push_back({message, key, line});
     }
 
-    // Returns the list of collected parsing errors.
-    const std::vector<ParseError>& getErrors() const {
-        return _errors;
+    // Records a missing required field by name. All missing fields are consolidated into one error.
+    void addMissingRequiredKey(const std::string& name) {
+        _missing_required.push_back(name);
     }
 
-    // Checks if there are any collected parsing errors.
+    /**
+     * @brief Returns all errors: consolidated required-fields error first, then parse errors in order.
+     * @return A vector of ParseError structs.
+     */
+    std::vector<ParseError> getErrors() const {
+        std::vector<ParseError> result;
+        if (!_missing_required.empty()) {
+            std::string msg = "missing required fields: ";
+            for (size_t i = 0; i < _missing_required.size(); ++i) {
+                msg += "'" + _missing_required[i] + "'";
+                if (i < _missing_required.size() - 1) msg += ", ";
+            }
+            result.push_back({msg, std::nullopt, std::nullopt});
+        }
+        result.insert(result.end(), _errors.begin(), _errors.end());
+        return result;
+    }
+
+    // Checks if there are any collected errors, including missing required fields.
     bool hasErrors() const {
-        return !_errors.empty();
+        return !_errors.empty() || !_missing_required.empty();
     }
 
 private:
     std::vector<ParseError> _errors;
+    std::vector<std::string> _missing_required;
 };
 
 /**
@@ -492,12 +515,13 @@ public:
      *
      * @note Recommended to chain with .as<T>() to get the value as the expected type with a one-liner.
      */
-    const Value& get(std::string_view key) const {
+    const Value& get(std::string_view key,
+                     std::source_location loc = std::source_location::current()) const {
         auto it = _values.find(std::string(key));
         if (it != _values.end()) {
             return it->second;
         } else {
-            throw CordException("Key not found: " + std::string(key));
+            throw CordException(loc.file_name(), loc.line(), "Key not found: " + std::string(key));
         }
     }
 
@@ -525,28 +549,30 @@ public:
         return _ec.hasErrors();
     }
 
-    const std::vector<ParseError>& getErrors() const {
-        return _ec.getErrors();
-    }
-
-    // Prints all parsing errors to std::cerr
+    // Prints all errors to std::cerr, with file and line context where available.
     void printErrors() const {
         for (const auto& error : _ec.getErrors()) {
-            std::cerr << "Error";
+            std::cerr << "[CORD] ";
 
-            if (error.line.has_value()) std::cerr << " line " << error.line.value() << ": ";
-            else std::cerr << ": ";
+            if (!_filepath.empty() && error.line.has_value())
+                std::cerr << _filepath << ":" << error.line.value() << ": ";
+            else if (!_filepath.empty())
+                std::cerr << _filepath << ": ";
+            else if (error.line.has_value())
+                std::cerr << "Line " << error.line.value() << ": ";
 
-            std::cerr << error.message;
-
-            if (error.key.has_value()) std::cerr << " (key: " << error.key.value() << ")";
-            std::cerr << std::endl;
+            std::cerr << error.message << "\n";
         }
+    }
+
+    const std::vector<ParseError> getErrors() const {
+        return _ec.getErrors();
     }
 
 private:
     std::unordered_map<std::string, Value> _values;
     ErrorCollector _ec;
+    std::string _filepath;
 };
 
 /**
@@ -561,10 +587,10 @@ public:
      * @brief Parses the input string according to the schema.
      * @param input The input string to parse.
      * @return A Result object containing the parsed values and any errors.
-     * @throws CordException if the schema is not properly configured.
      */
     Result parse(const std::string_view input) {
         Result result;
+        result._filepath = _filepath;
 
         // split input into lines
         std::vector<std::string_view> lines;
@@ -583,7 +609,7 @@ public:
 
             size_t delimiter_pos = trimmed_line.find(_delimiter);
             if (delimiter_pos == std::string_view::npos) {
-                result._ec.addError("Missing delimiter (" + std::string(_delimiter) + ") in line: " + std::string(lines[i]), std::nullopt, i + 1);
+                result._ec.addError("Missing delimiter (" + std::string(_delimiter) + ") on line: \"" + std::string(lines[i]) + "\"", std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
 
@@ -608,49 +634,39 @@ public:
             }
 
             if (!field) {
-                if (_strict) result._ec.addError("Unknown key: " + std::string(key));
+                if (_strict) result._ec.addError("Unexpected key in strict mode: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
 
-            std::string parse_error;
-            auto tryParseAndStore = [&](auto tryParseFunc) -> bool {
-                auto res = (this->*tryParseFunc)(value_str);
-                if (res.value.has_value()) {
-                    result._values.insert_or_assign(field->getName(), Value(*res.value));
-                    return true;
-                }
-                parse_error = res.error;
-                return false;
-            };
-
             bool parsed = false;
+            std::string parse_error;
             switch (field->getType()) {
                 case FieldType::BOOL:
-                    parsed = tryParseAndStore(&Schema::_tryParseBool); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseBool); break;
                 case FieldType::STRING:
-                    parsed = tryParseAndStore(&Schema::_tryParseString); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseString); break;
                 case FieldType::INT:
-                    parsed = tryParseAndStore(&Schema::_tryParseInt); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseInt); break;
                 case FieldType::FLOAT:
-                    parsed = tryParseAndStore(&Schema::_tryParseFloat); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseFloat); break;
                 case FieldType::DOUBLE:
-                    parsed = tryParseAndStore(&Schema::_tryParseDouble); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseDouble); break;
                 case FieldType::VECTOR_BOOL:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorBool); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorBool); break;
                 case FieldType::VECTOR_INT:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorInt); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorInt); break;
                 case FieldType::VECTOR_FLOAT:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorFloat); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorFloat); break;
                 case FieldType::VECTOR_DOUBLE:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorDouble); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorDouble); break;
                 case FieldType::VECTOR_STRING:
-                    parsed = tryParseAndStore(&Schema::_tryParseVectorString); break;
+                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorString); break;
             }
 
             if (!parsed) {
-                std::string msg = "Failed to parse value for key: " + std::string(key);
-                if (!parse_error.empty()) msg += " (" + parse_error + ")";
-                result._ec.addError(msg);
+                std::string msg = "Invalid value for '" + std::string(key) + "'";
+                if (!parse_error.empty()) msg += ": " + parse_error;
+                result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
             } else {
                 checkFieldConstraints(result, field, i + 1);
             }
@@ -663,9 +679,11 @@ public:
 
     // Thin wrapper around parse() for convenience
     Result parseFile(const std::string& filename) {
+        _filepath = filename;
         std::ifstream file(filename);
         if (!file.is_open()) {
             Result result;
+            result._filepath = _filepath;
             result._ec.addError("Failed to open file: " + filename);
             return result;
         }
@@ -785,9 +803,10 @@ public:
      *
      * @note "=" is the default.
      */
-    void setDelimiter(const std::string& delimiter) {
+    void setDelimiter(const std::string& delimiter,
+                      std::source_location loc = std::source_location::current()) {
         if (delimiter.empty()) {
-            throw CordException("Delimiter cannot be empty");
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
         }
         _delimiter = delimiter;
     }
@@ -804,9 +823,10 @@ public:
      *
      * @note "#" is the default.
      */
-    void setCommentMarker(const std::string& marker) {
+    void setCommentMarker(const std::string& marker,
+                          std::source_location loc = std::source_location::current()) {
         if (marker.empty()) {
-            throw CordException("Comment marker cannot be empty");
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
         }
         _comment_marker = marker;
     }
@@ -818,6 +838,7 @@ private:
     bool _case_insensitive = false;
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
+    std::string _filepath;
 
     void checkFieldConstraints(Result& result, IField* field, size_t line) const {
         auto it = result._values.find(field->getName());
@@ -831,7 +852,7 @@ private:
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (field->isRequired() && result._values.find(name) == result._values.end()) {
-                result._ec.addError("Missing required field: " + name);
+                result._ec.addMissingRequiredKey(name);
             }
         }
     }
@@ -865,16 +886,29 @@ private:
         return s;
     }
 
+    template<typename T>
+    bool _tryParseAndStore(Result& result, IField* field, std::string_view value_str,
+                           std::string& parse_error,
+                           ParseResult<T> (Schema::*parse_fn)(std::string_view) const) const {
+        auto res = (this->*parse_fn)(value_str);
+        if (res.value.has_value()) {
+            result._values.insert_or_assign(field->getName(), Value(*res.value));
+            return true;
+        }
+        parse_error = res.error;
+        return false;
+    }
+
     ParseResult<int> _tryParseInt(const std::string_view str) const {
         try {
             size_t idx;
             int value = std::stoi(std::string(str), &idx);
-            if (idx != str.size()) return {};
+            if (idx != str.size()) return {{}, "\"" + std::string(str) + "\" is not a valid int"};
             return {value};
         } catch (const std::out_of_range&) {
-            return {};
+            return {{}, "value out of range for int: \"" + std::string(str) + "\""};
         } catch (const std::invalid_argument&) {
-            return {};
+            return {{}, "\"" + std::string(str) + "\" is not a valid int"};
         }
     }
 
@@ -882,25 +916,32 @@ private:
         try {
             size_t idx;
             double value = std::stod(std::string(str), &idx);
-            if (idx != str.size()) return {};
+            if (idx != str.size()) return {{}, "\"" + std::string(str) + "\" is not a valid double"};
             return {value};
         } catch (const std::out_of_range&) {
-            return {};
+            return {{}, "value out of range for double: \"" + std::string(str) + "\""};
         } catch (const std::invalid_argument&) {
-            return {};
+            return {{}, "\"" + std::string(str) + "\" is not a valid double"};
         }
     }
 
     ParseResult<float> _tryParseFloat(const std::string_view str) const {
-        auto res = _tryParseDouble(str);
-        if (!res.value.has_value()) return {};
-        return {static_cast<float>(*res.value)};
+        try {
+            size_t idx;
+            float value = std::stof(std::string(str), &idx);
+            if (idx != str.size()) return {{}, "\"" + std::string(str) + "\" is not a valid float"};
+            return {value};
+        } catch (const std::out_of_range&) {
+            return {{}, "value out of range for float: \"" + std::string(str) + "\""};
+        } catch (const std::invalid_argument&) {
+            return {{}, "\"" + std::string(str) + "\" is not a valid float"};
+        }
     }
 
     ParseResult<bool> _tryParseBool(const std::string_view str) const {
         if (str == "true") return {true};
         if (str == "false") return {false};
-        return {};
+        return {{}, "expected 'true' or 'false', got: \"" + std::string(str) + "\""};
     }
 
     ParseResult<std::string> _tryParseString(const std::string_view str) const {
@@ -938,76 +979,52 @@ private:
         return result;
     }
 
-    std::optional<std::vector<std::string_view>> _extractVectorElements(std::string_view str) const {
-        if (str.empty() || str.front() != '[') return std::nullopt;
+    VectorElements _extractVectorElements(std::string_view str) const {
+        if (str.empty() || str.front() != '[')
+            return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
 
         size_t close_bracket = str.find(']');
-        if (close_bracket == std::string_view::npos) return std::nullopt;
+        if (close_bracket == std::string_view::npos)
+            return {{}, "missing closing ']' in vector value"};
 
         std::string_view inner = _trim(str.substr(1, close_bracket - 1));
-        if (inner.empty()) return std::vector<std::string_view>{};
+        if (inner.empty()) return {{}, ""};
 
-        return _splitCommas(inner);
+        return {_splitCommas(inner), ""};
+    }
+
+    template<typename T, typename ParseFn>
+    ParseResult<std::vector<T>> _tryParseVector(std::string_view str, ParseFn parse_elem) const {
+        auto extracted = _extractVectorElements(str);
+        if (!extracted.error.empty()) return {{}, extracted.error};
+        std::vector<T> result;
+        for (size_t idx = 0; idx < extracted.items.size(); ++idx) {
+            auto res = parse_elem(extracted.items[idx]);
+            if (!res.value.has_value())
+                return {{}, "element at index " + std::to_string(idx) + ": " + res.error};
+            result.push_back(*res.value);
+        }
+        return {result};
     }
 
     ParseResult<std::vector<bool>> _tryParseVectorBool(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<bool> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseBool(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<bool>(str, [this](std::string_view s) { return _tryParseBool(s); });
     }
 
     ParseResult<std::vector<int>> _tryParseVectorInt(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<int> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseInt(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<int>(str, [this](std::string_view s) { return _tryParseInt(s); });
     }
 
     ParseResult<std::vector<float>> _tryParseVectorFloat(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<float> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseFloat(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<float>(str, [this](std::string_view s) { return _tryParseFloat(s); });
     }
 
     ParseResult<std::vector<double>> _tryParseVectorDouble(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<double> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseDouble(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<double>(str, [this](std::string_view s) { return _tryParseDouble(s); });
     }
 
     ParseResult<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
-        auto elements = _extractVectorElements(str);
-        if (!elements.has_value()) return {};
-        std::vector<std::string> result;
-        for (const auto& item : *elements) {
-            auto res = _tryParseString(item);
-            if (!res.value.has_value()) return {};
-            result.push_back(*res.value);
-        }
-        return {result};
+        return _tryParseVector<std::string>(str, [this](std::string_view s) { return _tryParseString(s); });
     }
 };
 
