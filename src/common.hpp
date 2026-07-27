@@ -30,12 +30,39 @@ struct VectorElements {
 #define CORD_NUMERIC_ONLY(context) \
     "\n\n[CORD] " context " is only supported for numeric types (int, float, double)\n"
 
-// Type trait to check if T is a numeric cord type (eligible for min/max)
+#define CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL(context) \
+    "\n\n[CORD] Unsupported type for " context "\n" \
+    "[CORD] Supported types: int, float, double, std::string, " \
+    "std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
+
+// Type trait to check if T is a numeric cord type
 template<typename T>
-constexpr bool is_numeric_type_v =
+constexpr bool is_supported_numeric_type_v =
     std::is_same_v<T, int> ||
     std::is_same_v<T, float> ||
     std::is_same_v<T, double>;
+
+// Type trait to check if T is a supported vector type
+template<typename T>
+constexpr bool is_supported_vector_type_v =
+    std::is_same_v<T, std::vector<bool>> ||
+    std::is_same_v<T, std::vector<int>> ||
+    std::is_same_v<T, std::vector<float>> ||
+    std::is_same_v<T, std::vector<double>> ||
+    std::is_same_v<T, std::vector<std::string>>;
+
+// Type trait to check if T is a supported type, bool excluded (for min() and max())
+template<typename T>
+constexpr bool is_supported_type_exclude_bool_v =
+    std::is_same_v<T, int> ||
+    std::is_same_v<T, float> ||
+    std::is_same_v<T, double> ||
+    std::is_same_v<T, std::string> ||
+    std::is_same_v<T, std::vector<bool>> ||
+    std::is_same_v<T, std::vector<int>> ||
+    std::is_same_v<T, std::vector<float>> ||
+    std::is_same_v<T, std::vector<double>> ||
+    std::is_same_v<T, std::vector<std::string>>;
 
 // Type trait to check if T is a supported cord type
 // Also supports const char* and char* for convenience in result.get_or()
@@ -75,7 +102,7 @@ std::string valueToString(const T& val) {
         return val ? "true" : "false";
     else if constexpr (std::is_same_v<T, std::string>)
         return "\"" + val + "\"";
-    else if constexpr (is_numeric_type_v<T>)
+    else if constexpr (is_supported_numeric_type_v<T>)
         return std::to_string(val);
     else if constexpr (std::is_same_v<typename T::value_type, bool>)
         // vector<bool> handled separately — operator[] returns proxy, not bool ref
