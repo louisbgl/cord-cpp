@@ -23,17 +23,20 @@ int main() {
     std::cout << std::endl;
 
     auto result = schema.parseFile("arrays.conf");
-    if (result.hasErrors()) result.printErrors();
-    else {
-        std::cout << "Parsed values:" << std::endl;
-        std::cout << "name: " << result.get("name").as<std::string>() << std::endl;
-        std::cout << "level: " << result.get("level").as<int>() << std::endl;
-        std::cout << "items: ";
-        for (const auto& item : result.get("items").as<std::vector<std::string>>()) {
-            std::cout << item << " ";
-        }
-        std::cout << std::endl;
+
+    if (result.hasErrors()) {
+        result.printErrors();
+        return 1;
     }
+
+    std::cout << "Parsed values:" << std::endl;
+    std::cout << "name: " << result.get("name").as<std::string>() << std::endl;
+    std::cout << "level: " << result.get("level").as<int>() << std::endl;
+    std::cout << "items: ";
+    for (const auto& item : result.get("items").as<std::vector<std::string>>()) {
+        std::cout << item << " ";
+    }
+    std::cout << std::endl;
 
     return 0;
 }

@@ -77,6 +77,33 @@ TEST_CASE("Double with trailing garbage rejected", "[parsing]") {
     CHECK(result.hasErrors());
 }
 
+TEST_CASE("Float overflow rejected", "[parsing]") {
+    cord::Schema schema;
+    schema.add<float>("value");
+
+    auto result = schema.parse("value = 1e9999");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("out of range for float") != std::string::npos);
+}
+
+TEST_CASE("Float non-numeric string rejected", "[parsing]") {
+    cord::Schema schema;
+    schema.add<float>("value");
+
+    auto result = schema.parse("value = abc");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("not a valid float") != std::string::npos);
+}
+
+TEST_CASE("Trailing backslash in string rejected", "[parsing][escape]") {
+    cord::Schema schema;
+    schema.add<std::string>("val");
+
+    auto result = schema.parse("val = \"bad\\\"");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("trailing backslash") != std::string::npos);
+}
+
 TEST_CASE("Double non-numeric string rejected", "[parsing]") {
     cord::Schema schema;
     schema.add<double>("value");

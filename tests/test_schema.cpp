@@ -299,3 +299,82 @@ TEST_CASE("oneOf() error includes line number", "[schema][constraints]") {
     REQUIRE(result.getErrors()[0].line.has_value());
     CHECK(result.getErrors()[0].line.value() == 1);
 }
+
+TEST_CASE("min() enforced for string length", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("password").min(8);
+
+    CHECK_FALSE(schema.parse("password = \"longpassword\"").hasErrors());
+
+    auto bad = schema.parse("password = \"short\"");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("shorter than minimum length") != std::string::npos);
+}
+
+TEST_CASE("max() enforced for string length", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("tag").max(10);
+
+    CHECK_FALSE(schema.parse("tag = \"short\"").hasErrors());
+
+    auto bad = schema.parse("tag = \"way_too_long_tag\"");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("longer than maximum length") != std::string::npos);
+}
+
+TEST_CASE("min() and max() combined for string length", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::string>("name").min(2).max(10);
+
+    CHECK_FALSE(schema.parse("name = \"alice\"").hasErrors());
+    CHECK(schema.parse("name = \"a\"").hasErrors());
+    CHECK(schema.parse("name = \"way_too_long_name\"").hasErrors());
+}
+
+TEST_CASE("min() enforced for vector element count", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::vector<int>>("ports").min(1);
+
+    CHECK_FALSE(schema.parse("ports = [8080, 9090]").hasErrors());
+
+    auto bad = schema.parse("ports = []");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("too few elements") != std::string::npos);
+}
+
+TEST_CASE("max() enforced for vector element count", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("tags").max(3);
+
+    CHECK_FALSE(schema.parse("tags = [\"x\", \"y\"]").hasErrors());
+
+    auto bad = schema.parse("tags = [\"a\", \"b\", \"c\", \"d\"]");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("too many elements") != std::string::npos);
+}
+
+TEST_CASE("min() and max() combined for vector element count", "[schema][constraints]") {
+    cord::Schema schema;
+    schema.add<std::vector<int>>("ids").min(1).max(5);
+
+    CHECK_FALSE(schema.parse("ids = [1, 2, 3]").hasErrors());
+    CHECK(schema.parse("ids = []").hasErrors());
+    CHECK(schema.parse("ids = [1, 2, 3, 4, 5, 6]").hasErrors());
+}
+
+TEST_CASE("describeConstraints() for string with min and max", "[schema][constraints]") {
+    cord::Schema schema;
+    auto& f = schema.add<std::string>("name").min(2).max(10);
+    std::string desc = f.describeConstraints();
+    CHECK(desc.find("2") != std::string::npos);
+    CHECK(desc.find("10") != std::string::npos);
+    CHECK(desc.find("..") != std::string::npos);
+}
+
+TEST_CASE("describeConstraints() for vector with min only", "[schema][constraints]") {
+    cord::Schema schema;
+    auto& f = schema.add<std::vector<int>>("ids").min(1);
+    std::string desc = f.describeConstraints();
+    CHECK(desc.find("1") != std::string::npos);
+    CHECK(desc.find("..") != std::string::npos);
+}

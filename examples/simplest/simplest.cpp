@@ -27,18 +27,20 @@ int main() {
     auto result = schema.parseFile("simplest.conf");
 
     // Result is a container for the parsed values and any errors that may have occurred during parsing
-    if (result.hasErrors()) result.printErrors();
-    else {
-        std::cout << "Parsed values:" << std::endl;
-
-        // When getting values from the result, it's advised to chain result.get() with .as<T>() to get the value as the expected type
-        // result.get() can throw if the key is not present in the result
-        // .as<T>() can throw if the value is not of the expected type
-        // .as<T>() is nice because it makes the type gotten clear and safe
-        std::cout << "port: " << result.get("port").as<int>()                         << std::endl;
-        std::cout << "host: " << result.get("host").as<std::string>()                 << std::endl;
-        std::cout << "debug: " << (result.get("debug").as<bool>() ? "true" : "false") << std::endl;
+    if (result.hasErrors()) {
+        result.printErrors();
+        return 1;
     }
+    
+    std::cout << "Parsed values:" << std::endl;
+
+    // When getting values from the result, it's advised to chain result.get() with .as<T>() to get the value as the expected type
+    // result.get() can throw if the key is not present in the result
+    // .as<T>() can throw if the value is not of the expected type
+    // .as<T>() is nice because it makes the type gotten clear and safe
+    std::cout << "port: " << result.get("port").as<int>()                         << std::endl;
+    std::cout << "host: " << result.get("host").as<std::string>()                 << std::endl;
+    std::cout << "debug: " << (result.get("debug").as<bool>() ? "true" : "false") << std::endl;
 
     return 0;
 }
