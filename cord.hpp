@@ -30,6 +30,10 @@
 // Error message macro for static_assert failures on non-numeric types
 #define CORD_NUMERIC_ONLY(context) \
     "\n\n[CORD] " context " is only supported for numeric types (int, float, double)\n"
+#define CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL(context) \
+    "\n\n[CORD] Unsupported type for " context "\n" \
+    "[CORD] Supported types: int, float, double, std::string, " \
+    "std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
 
 namespace cord {
 
@@ -44,12 +48,34 @@ struct VectorElements {
     std::string error;
 };
 
-// Type trait to check if T is a numeric cord type (eligible for min/max)
+// Type trait to check if T is a numeric cord type
 template<typename T>
-constexpr bool is_numeric_type_v =
+constexpr bool is_supported_numeric_type_v =
     std::is_same_v<T, int> ||
     std::is_same_v<T, float> ||
     std::is_same_v<T, double>;
+
+// Type trait to check if T is a supported vector type
+template<typename T>
+constexpr bool is_supported_vector_type_v =
+    std::is_same_v<T, std::vector<bool>> ||
+    std::is_same_v<T, std::vector<int>> ||
+    std::is_same_v<T, std::vector<float>> ||
+    std::is_same_v<T, std::vector<double>> ||
+    std::is_same_v<T, std::vector<std::string>>;
+
+// Type trait to check if T is a supported type, bool excluded (for min() and max())
+template<typename T>
+constexpr bool is_supported_type_exclude_bool_v =
+    std::is_same_v<T, int> ||
+    std::is_same_v<T, float> ||
+    std::is_same_v<T, double> ||
+    std::is_same_v<T, std::string> ||
+    std::is_same_v<T, std::vector<bool>> ||
+    std::is_same_v<T, std::vector<int>> ||
+    std::is_same_v<T, std::vector<float>> ||
+    std::is_same_v<T, std::vector<double>> ||
+    std::is_same_v<T, std::vector<std::string>>;
 
 // Type trait to check if T is a supported cord type
 // Also supports const char* and char* for convenience in result.get_or()
@@ -89,7 +115,7 @@ std::string valueToString(const T& val) {
         return val ? "true" : "false";
     else if constexpr (std::is_same_v<T, std::string>)
         return "\"" + val + "\"";
-    else if constexpr (is_numeric_type_v<T>)
+    else if constexpr (is_supported_numeric_type_v<T>)
         return std::to_string(val);
     else if constexpr (std::is_same_v<typename T::value_type, bool>)
         // vector<bool> handled separately — operator[] returns proxy, not bool ref
@@ -331,12 +357,26 @@ public:
     }
 
     std::optional<std::string> checkConstraints(const Value& value) const override {
-        if constexpr (is_numeric_type_v<T>) {
+        if constexpr (is_supported_numeric_type_v<T>) {
             T v = value.as<T>();
             if (_min_value.has_value() && v < *_min_value)
                 return "value " + valueToString(v) + " is below minimum " + valueToString(*_min_value);
             if (_max_value.has_value() && v > *_max_value)
                 return "value " + valueToString(v) + " exceeds maximum " + valueToString(*_max_value);
+        }
+        if constexpr (std::is_same_v<T, std::string>) {
+            std::string v = value.as<std::string>();
+            if (_min_size.has_value() && v.size() < *_min_size)
+                return "value " + valueToString(v) + " is shorter than minimum length " + std::to_string(*_min_size);
+            if (_max_size.has_value() && v.size() > *_max_size)
+                return "value " + valueToString(v) + " is longer than maximum length " + std::to_string(*_max_size);
+        }
+        if constexpr (is_supported_vector_type_v<T>) {
+            T v = value.as<T>();
+            if (_min_size.has_value() && v.size() < *_min_size)
+                return "vector has too few elements: got " + std::to_string(v.size()) + ", minimum " + std::to_string(*_min_size);
+            if (_max_size.has_value() && v.size() > *_max_size)
+                return "vector has too many elements: got " + std::to_string(v.size()) + ", maximum " + std::to_string(*_max_size);
         }
         if (_allowed_values.has_value()) {
             T v = value.as<T>();
@@ -352,12 +392,21 @@ public:
         std::string range;
         std::string choices;
 
-        if constexpr (is_numeric_type_v<T>) {
+        if constexpr (is_supported_numeric_type_v<T>) {
             if (_min_value.has_value() || _max_value.has_value()) {
                 range = "[";
                 range += _min_value.has_value() ? valueToString(*_min_value) : "";
                 range += "..";
                 range += _max_value.has_value() ? valueToString(*_max_value) : "";
+                range += "]";
+            }
+        }
+        if constexpr (std::is_same_v<T, std::string> || is_supported_vector_type_v<T>) {
+            if (_min_size.has_value() || _max_size.has_value()) {
+                range = "[";
+                range += _min_size.has_value() ? std::to_string(*_min_size) : "";
+                range += "..";
+                range += _max_size.has_value() ? std::to_string(*_max_size) : "";
                 range += "]";
             }
         }
@@ -393,30 +442,46 @@ public:
     }
 
     /**
-     * @brief Sets the minimum allowed value for the field.
-     * @param val The minimum value (inclusive).
+     * @brief Sets the minimum allowed value (numeric) or minimum length/count (string/vector).
+     * @param val The minimum value (inclusive). For numeric types, compared directly. For string/vector, specifies minimum length or element count.
      * @return Reference to this field for chaining.
-     *
-     * @note This method performs compile-time checks to ensure that the type T is supported.
-     * @note Only supported for numeric types (int, float, double).
      */
     Field<T>& min(T val) {
-        static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
         _min_value = val;
         return *this;
     }
 
     /**
-     * @brief Sets the maximum allowed value for the field.
-     * @param val The maximum value (inclusive).
+     * @brief Sets the minimum length (string) or minimum element count (vector).
+     * @param count The minimum size (inclusive).
      * @return Reference to this field for chaining.
-     *
-     * @note This method performs compile-time checks to ensure that the type T is supported.
-     * @note Only supported for numeric types (int, float, double).
+     */
+    Field<T>& min(size_t count) {
+        static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
+        _min_size = count;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum allowed value (numeric) or maximum length/count (string/vector).
+     * @param val The maximum value (inclusive). For numeric types, compared directly. For string/vector, specifies maximum length or element count.
+     * @return Reference to this field for chaining.
      */
     Field<T>& max(T val) {
-        static_assert(is_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
         _max_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum length (string) or maximum element count (vector).
+     * @param count The maximum size (inclusive).
+     * @return Reference to this field for chaining.
+     */
+    Field<T>& max(size_t count) {
+        static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
+        _max_size = count;
         return *this;
     }
 
@@ -439,6 +504,8 @@ private:
     bool _required = false;
     std::optional<T> _min_value = std::nullopt;
     std::optional<T> _max_value = std::nullopt;
+    std::optional<size_t> _min_size = std::nullopt;
+    std::optional<size_t> _max_size = std::nullopt;
     std::optional<std::vector<T>> _allowed_values = std::nullopt;
 };
 
