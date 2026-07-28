@@ -1,4 +1,4 @@
-set(EXAMPLES simplest arrays optionals config_markers constraints)
+set(EXAMPLES simplest arrays optionals config_markers constraints writing)
 
 foreach(EXAMPLE ${EXAMPLES})
     set(TARGET example_${EXAMPLE})
