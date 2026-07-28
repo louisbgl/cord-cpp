@@ -457,3 +457,15 @@ TEST_CASE("describeConstraints() for vector with min only", "[schema][constraint
     CHECK(desc.find("1") != std::string::npos);
     CHECK(desc.find("..") != std::string::npos);
 }
+
+TEST_CASE("Adding duplicate field name throws", "[schema]") {
+    cord::Schema schema;
+    schema.add<int>("port");
+    CHECK_THROWS_AS(schema.add<int>("port"), cord::CordException);
+}
+
+TEST_CASE("Adding duplicate field name with different type throws", "[schema]") {
+    cord::Schema schema;
+    schema.add<int>("port");
+    CHECK_THROWS_AS(schema.add<std::string>("port"), cord::CordException);
+}
