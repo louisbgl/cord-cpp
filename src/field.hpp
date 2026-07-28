@@ -269,8 +269,10 @@ public:
      * @param val The minimum value (inclusive). For numeric types, compared directly. For string/vector, specifies minimum length or element count.
      * @return Reference to this field for chaining.
      */
-    Field<T>& min(T val) {
+    Field<T>& min(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        if (_max_value.has_value() && val > *_max_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
         _min_value = val;
         return *this;
     }
@@ -280,8 +282,10 @@ public:
      * @param count The minimum size (inclusive).
      * @return Reference to this field for chaining.
      */
-    Field<T>& min(size_t count) {
+    Field<T>& min(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
+        if (_max_size.has_value() && count > *_max_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
         _min_size = count;
         return *this;
     }
@@ -291,8 +295,10 @@ public:
      * @param val The maximum value (inclusive). For numeric types, compared directly. For string/vector, specifies maximum length or element count.
      * @return Reference to this field for chaining.
      */
-    Field<T>& max(T val) {
+    Field<T>& max(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        if (_min_value.has_value() && val < *_min_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
         _max_value = val;
         return *this;
     }
@@ -302,8 +308,10 @@ public:
      * @param count The maximum size (inclusive).
      * @return Reference to this field for chaining.
      */
-    Field<T>& max(size_t count) {
+    Field<T>& max(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
+        if (_min_size.has_value() && count < *_min_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
         _max_size = count;
         return *this;
     }
@@ -315,8 +323,11 @@ public:
      *
      * @note This method performs compile-time checks to ensure that the type T is supported.
      */
-    Field<T>& oneOf(std::initializer_list<T> values) {
+    Field<T>& oneOf(std::initializer_list<T> values, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("oneOf()"));
+        if (values.size() == 0) {
+            throw CordException(loc.file_name(), loc.line(), "oneOf() with empty list: no value can satisfy these constraints");
+        }
         _allowed_values = std::vector<T>(values);
         return *this;
     }
