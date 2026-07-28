@@ -113,6 +113,8 @@ public:
         return _ec.getErrors();
     }
 
+    // Writes the parsed key-value pairs to a string in the format "key + delimiter + val\n"
+    // Yes we reuse the Schema delimiter here, because the Result is tied to the Schema that produced it
     std::string write() const {
         std::string output;
         for (const auto& [key, value] : _values) {
@@ -121,6 +123,8 @@ public:
         return output;
     }
 
+    // Writes the parsed key-value pairs to a file in the format "key + delimiter + val\n"
+    // Yes we reuse the Schema delimiter here, because the Result is tied to the Schema that produced it
     void writeFile(const std::string& filename) const {
         std::ofstream file(filename);
         if (!file.is_open())
