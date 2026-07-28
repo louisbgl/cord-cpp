@@ -121,6 +121,13 @@ public:
         return output;
     }
 
+    void writeFile(const std::string& filename) const {
+        std::ofstream file(filename);
+        if (!file.is_open())
+            throw CordException("Failed to open file for writing: " + filename);
+        file << write();
+    }
+
 private:
     std::vector<std::pair<std::string, Value>> _values;
     ErrorCollector _ec;

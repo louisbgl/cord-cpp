@@ -32,5 +32,8 @@ int main() {
 
     std::cout << result.write() << std::endl;
 
+    std::cout << "Writing to file 'output.txt'" << std::endl;
+    result.writeFile("output.txt");
+
     return 0;
 }
