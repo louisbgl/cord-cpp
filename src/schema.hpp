@@ -8,6 +8,7 @@
 #include <sstream>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 #include <memory>
@@ -251,12 +252,12 @@ public:
                 if (!parse_error.empty()) msg += ": " + parse_error;
                 result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
             } else {
-                checkFieldConstraints(result, field, i + 1);
+                _checkFieldConstraints(result, field, i + 1);
             }
         }
 
-        ensureRequiredFieldsPresent(result);
-        applyDefaultValues(result);
+        _ensureRequiredFieldsPresent(result);
+        _applyDefaultValues(result);
         return result;
     }
 
@@ -343,13 +344,18 @@ public:
      * @brief Adds a field to the schema
      * @tparam T The type of the field
      * @param name The name of the field
+     * @param loc The source location for error reporting (default: current location)
      * @return A reference to the added field
      *
      * @note Compile-time checks are performed to ensure that only supported types are used.
      */
     template<typename T>
-    Field<T>& add(std::string name) {
+    Field<T>& add(std::string name,
+                  std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<T>()"));
+        if (name.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
+        }
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
         _fields.push_back(std::move(field));
@@ -375,7 +381,9 @@ public:
     }
 
     // Sets the delimiter for key-value pairs, '=' is the default
-    void setDelimiter(const char delimiter) {
+    void setDelimiter(const char delimiter,
+                      std::source_location loc = std::source_location::current()) {
+        _ensureDelimiterOkay(std::string(1, delimiter), loc);
         _delimiter = delimiter;
     }
 
@@ -388,14 +396,14 @@ public:
      */
     void setDelimiter(const std::string& delimiter,
                       std::source_location loc = std::source_location::current()) {
-        if (delimiter.empty()) {
-            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
-        }
+        _ensureDelimiterOkay(delimiter, loc);
         _delimiter = delimiter;
     }
 
     // Sets the comment marker for comments, '#' is the default
-    void setCommentMarker(const char marker) {
+    void setCommentMarker(const char marker,
+                           std::source_location loc = std::source_location::current()) {
+        _ensureCommentMarkerOkay(std::string(1, marker), loc);
         _comment_marker = marker;
     }
 
@@ -408,9 +416,7 @@ public:
      */
     void setCommentMarker(const std::string& marker,
                           std::source_location loc = std::source_location::current()) {
-        if (marker.empty()) {
-            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
-        }
+        _ensureCommentMarkerOkay(marker, loc);
         _comment_marker = marker;
     }
 
@@ -423,14 +429,37 @@ private:
     std::string _comment_marker = "#";
     std::string _filepath;
 
-    void checkFieldConstraints(Result& result, IField* field, size_t line) const {
+    void _ensureDelimiterOkay(const std::string& delimiter, std::source_location loc) const {
+        if (delimiter.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
+        }
+        if (delimiter == "\n") {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be a newline character");
+        }
+        if (delimiter == _comment_marker) {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be the same as the comment marker");
+        }
+    }
+    void _ensureCommentMarkerOkay(const std::string& marker, std::source_location loc) const {
+        if (marker.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
+        }
+        if (marker == "\n") {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be a newline character");
+        }
+        if (marker == _delimiter) {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be the same as the delimiter");
+        }
+    }
+
+    void _checkFieldConstraints(Result& result, IField* field, size_t line) const {
         if (!result.contains(field->getName())) return;
         auto err = field->checkConstraints(result.get(field->getName()));
         if (err.has_value())
             result._ec.addError("Constraint violation for '" + field->getName() + "': " + *err, field->getName(), line);
     }
 
-    void ensureRequiredFieldsPresent(Result& result) const {
+    void _ensureRequiredFieldsPresent(Result& result) const {
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (field->isRequired() && !result.contains(name)) {
@@ -439,7 +468,7 @@ private:
         }
     }
 
-    void applyDefaultValues(Result& result) const {
+    void _applyDefaultValues(Result& result) const {
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (!field->hasDefault()) continue;
