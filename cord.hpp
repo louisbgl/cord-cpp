@@ -445,8 +445,10 @@ public:
      * @param val The minimum value (inclusive). For numeric types, compared directly. For string/vector, specifies minimum length or element count.
      * @return Reference to this field for chaining.
      */
-    Field<T>& min(T val) {
+    Field<T>& min(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        if (_max_value.has_value() && val > *_max_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
         _min_value = val;
         return *this;
     }
@@ -456,8 +458,10 @@ public:
      * @param count The minimum size (inclusive).
      * @return Reference to this field for chaining.
      */
-    Field<T>& min(size_t count) {
+    Field<T>& min(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
+        if (_max_size.has_value() && count > *_max_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
         _min_size = count;
         return *this;
     }
@@ -467,8 +471,10 @@ public:
      * @param val The maximum value (inclusive). For numeric types, compared directly. For string/vector, specifies maximum length or element count.
      * @return Reference to this field for chaining.
      */
-    Field<T>& max(T val) {
+    Field<T>& max(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        if (_min_value.has_value() && val < *_min_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
         _max_value = val;
         return *this;
     }
@@ -478,8 +484,10 @@ public:
      * @param count The maximum size (inclusive).
      * @return Reference to this field for chaining.
      */
-    Field<T>& max(size_t count) {
+    Field<T>& max(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
+        if (_min_size.has_value() && count < *_min_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
         _max_size = count;
         return *this;
     }
@@ -491,8 +499,11 @@ public:
      *
      * @note This method performs compile-time checks to ensure that the type T is supported.
      */
-    Field<T>& oneOf(std::initializer_list<T> values) {
+    Field<T>& oneOf(std::initializer_list<T> values, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("oneOf()"));
+        if (values.size() == 0) {
+            throw CordException(loc.file_name(), loc.line(), "oneOf() with empty list: no value can satisfy these constraints");
+        }
         _allowed_values = std::vector<T>(values);
         return *this;
     }
@@ -759,6 +770,10 @@ public:
                 if (_strict) result._ec.addError("Unexpected key in strict mode: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
+            if (_strict && result.contains(key)) {
+                result._ec.addError("Duplicate key in strict mode: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
+                continue;
+            }
 
             bool parsed = false;
             std::string parse_error;
@@ -790,12 +805,12 @@ public:
                 if (!parse_error.empty()) msg += ": " + parse_error;
                 result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
             } else {
-                checkFieldConstraints(result, field, i + 1);
+                _checkFieldConstraints(result, field, i + 1);
             }
         }
 
-        ensureRequiredFieldsPresent(result);
-        applyDefaultValues(result);
+        _ensureRequiredFieldsPresent(result);
+        _applyDefaultValues(result);
         return result;
     }
 
@@ -882,21 +897,30 @@ public:
      * @brief Adds a field to the schema
      * @tparam T The type of the field
      * @param name The name of the field
+     * @param loc The source location for error reporting (default: current location)
      * @return A reference to the added field
      *
      * @note Compile-time checks are performed to ensure that only supported types are used.
      */
     template<typename T>
-    Field<T>& add(std::string name) {
+    Field<T>& add(std::string name,
+                  std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<T>()"));
+        if (name.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
+        }
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
         _fields.push_back(std::move(field));
         return ptr;
     }
 
-    // Sets the schema to strict mode, where unknown keys will result in errors
-    // Defaults to false
+    /**
+     * @brief Sets the schema to strict mode
+     * @param strict Whether to enable strict mode
+     *
+     * @note In strict mode, unknown keys will result in errors and duplicate keys will also result in errors.
+     */
     void setStrict(bool strict) {
         _strict = strict;
     }
@@ -914,7 +938,9 @@ public:
     }
 
     // Sets the delimiter for key-value pairs, '=' is the default
-    void setDelimiter(const char delimiter) {
+    void setDelimiter(const char delimiter,
+                      std::source_location loc = std::source_location::current()) {
+        _ensureDelimiterOkay(std::string(1, delimiter), loc);
         _delimiter = delimiter;
     }
 
@@ -927,14 +953,14 @@ public:
      */
     void setDelimiter(const std::string& delimiter,
                       std::source_location loc = std::source_location::current()) {
-        if (delimiter.empty()) {
-            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
-        }
+        _ensureDelimiterOkay(delimiter, loc);
         _delimiter = delimiter;
     }
 
     // Sets the comment marker for comments, '#' is the default
-    void setCommentMarker(const char marker) {
+    void setCommentMarker(const char marker,
+                           std::source_location loc = std::source_location::current()) {
+        _ensureCommentMarkerOkay(std::string(1, marker), loc);
         _comment_marker = marker;
     }
 
@@ -947,9 +973,7 @@ public:
      */
     void setCommentMarker(const std::string& marker,
                           std::source_location loc = std::source_location::current()) {
-        if (marker.empty()) {
-            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
-        }
+        _ensureCommentMarkerOkay(marker, loc);
         _comment_marker = marker;
     }
 
@@ -962,14 +986,37 @@ private:
     std::string _comment_marker = "#";
     std::string _filepath;
 
-    void checkFieldConstraints(Result& result, IField* field, size_t line) const {
+    void _ensureDelimiterOkay(const std::string& delimiter, std::source_location loc) const {
+        if (delimiter.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
+        }
+        if (delimiter.find('\n') != std::string::npos) {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot contain a newline character");
+        }
+        if (delimiter == _comment_marker) {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be the same as the comment marker");
+        }
+    }
+    void _ensureCommentMarkerOkay(const std::string& marker, std::source_location loc) const {
+        if (marker.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
+        }
+        if (marker.find('\n') != std::string::npos) {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot contain a newline character");
+        }
+        if (marker == _delimiter) {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be the same as the delimiter");
+        }
+    }
+
+    void _checkFieldConstraints(Result& result, IField* field, size_t line) const {
         if (!result.contains(field->getName())) return;
         auto err = field->checkConstraints(result.get(field->getName()));
         if (err.has_value())
             result._ec.addError("Constraint violation for '" + field->getName() + "': " + *err, field->getName(), line);
     }
 
-    void ensureRequiredFieldsPresent(Result& result) const {
+    void _ensureRequiredFieldsPresent(Result& result) const {
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (field->isRequired() && !result.contains(name)) {
@@ -978,7 +1025,7 @@ private:
         }
     }
 
-    void applyDefaultValues(Result& result) const {
+    void _applyDefaultValues(Result& result) const {
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (!field->hasDefault()) continue;
