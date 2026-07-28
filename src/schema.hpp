@@ -72,6 +72,21 @@ public:
         return Value(fallback);
     }
 
+    /**
+     * @brief Sets the value associated with a key, or adds it if it doesn't exist.
+     * @param key The key to set.
+     * @param value The value to set.
+     * @return A reference to the Result object.
+     *
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
+    template<typename T>
+    Result& set(std::string_view key, T value) {
+        static_assert(is_supported_type_v<T>, CORD_UNSUPPORTED_TYPE("result.set<T>()"));
+        _insert_or_modify_value(key, Value(value));
+        return *this;
+    }
+
     // Checks if there are any parsing errors
     bool hasErrors() const {
         return _ec.hasErrors();
