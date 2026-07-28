@@ -360,6 +360,11 @@ public:
         if (name.empty()) {
             throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
         }
+        for (const auto& f : _fields) {
+            if (f->getName() == name) {
+                throw CordException(loc.file_name(), loc.line(), "Schema cannot have duplicate field names: " + name);
+            }
+        }
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
         _fields.push_back(std::move(field));
