@@ -221,6 +221,10 @@ public:
                 if (_strict) result._ec.addError("Unexpected key in strict mode: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
                 continue;
             }
+            if (_strict && result.contains(key)) {
+                result._ec.addError("Duplicate key in strict mode: " + std::string(key), std::nullopt, static_cast<int>(i + 1));
+                continue;
+            }
 
             bool parsed = false;
             std::string parse_error;
@@ -362,8 +366,12 @@ public:
         return ptr;
     }
 
-    // Sets the schema to strict mode, where unknown keys will result in errors
-    // Defaults to false
+    /**
+     * @brief Sets the schema to strict mode
+     * @param strict Whether to enable strict mode
+     *
+     * @note In strict mode, unknown keys will result in errors and duplicate keys will also result in errors.
+     */
     void setStrict(bool strict) {
         _strict = strict;
     }
