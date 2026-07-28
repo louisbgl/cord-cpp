@@ -156,6 +156,18 @@ TEST_CASE("Empty comment marker throws", "[schema]") {
     CHECK_THROWS_AS(schema.setCommentMarker(""), cord::CordException);
 }
 
+TEST_CASE("Newline delimiter throws", "[schema]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.setDelimiter("\n"), cord::CordException);
+    CHECK_THROWS_AS(schema.setDelimiter("foo\nbar"), cord::CordException);
+}
+
+TEST_CASE("Newline comment marker throws", "[schema]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.setCommentMarker("\n"), cord::CordException);
+    CHECK_THROWS_AS(schema.setCommentMarker("foo\nbar"), cord::CordException);
+}
+
 TEST_CASE("Delimiter and comment marker identical throws", "[schema]") {
     cord::Schema schema;
     schema.setDelimiter(":");
@@ -397,6 +409,36 @@ TEST_CASE("min() and max() combined for vector element count", "[schema][constra
     CHECK_FALSE(schema.parse("ids = [1, 2, 3]").hasErrors());
     CHECK(schema.parse("ids = []").hasErrors());
     CHECK(schema.parse("ids = [1, 2, 3, 4, 5, 6]").hasErrors());
+}
+
+TEST_CASE("min() greater than max() throws for int", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<int>("port").min(100).max(10), cord::CordException);
+}
+
+TEST_CASE("min() greater than max() throws for float", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<float>("ratio").min(1.0f).max(0.0f), cord::CordException);
+}
+
+TEST_CASE("min() greater than max() throws for string length", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<std::string>("name").min(10).max(3), cord::CordException);
+}
+
+TEST_CASE("min() greater than max() throws for vector count", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<std::vector<int>>("ids").min(5).max(2), cord::CordException);
+}
+
+TEST_CASE("oneOf() with empty list throws", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<std::string>("level").oneOf({}), cord::CordException);
+}
+
+TEST_CASE("oneOf() with empty list throws for int", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<int>("verbosity").oneOf({}), cord::CordException);
 }
 
 TEST_CASE("describeConstraints() for string with min and max", "[schema][constraints]") {
