@@ -13,7 +13,7 @@ Header-only C++20 configuration parser with schema validation and fluent API.
 - **Type-safe**: compile-time checks via `static_assert`
 - **Fluent API**: chain `.required()`, `.default_()`, `.min()`, `.max()`, `.oneOf()`
 - **Error accumulation**: collect and inspect all errors at once
-- **Strict/lenient modes**: reject or ignore unknown keys
+- **Strict/lenient modes**: reject or ignore unknown keys and duplicate keys
 - **Write-back**: modify parsed values and serialize back to string or file
 
 ## Config File Format
@@ -25,7 +25,7 @@ Header-only C++20 configuration parser with schema validation and fluent API.
 - **Numbers:** `123` (int), `3.14` (float/double)
 - **Vectors:** `[item1, item2, item3]` with square brackets
 - **Comments:** `#` line or inline comments (when enabled)
-- **Duplicate keys:** Last value wins
+- **Duplicate keys:** Last value wins (strict mode rejects duplicates)
 
 ## Installation
 
@@ -134,7 +134,7 @@ schema.add<int>("verbosity").oneOf({0, 1, 2, 3});
 // Comments (enabled by default)
 schema.setAllowComments(true);
 
-// Strict mode: reject unknown keys (disabled by default)
+// Strict mode: reject unknown keys and duplicate keys (disabled by default)
 schema.setStrict(true);
 
 // Case-insensitive key matching: "PORT" matches field "port" (disabled by default)
