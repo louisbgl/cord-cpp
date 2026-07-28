@@ -18,7 +18,6 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -571,7 +570,8 @@ friend class Schema;
 public:
     // Checks if a key exists in the result.
     bool contains(std::string_view key) const {
-        return _values.find(std::string(key)) != _values.end();
+        if (_findValue(key) != -1) return true;
+        return false;
     }
 
     /**
@@ -584,9 +584,9 @@ public:
      */
     const Value& get(std::string_view key,
                      std::source_location loc = std::source_location::current()) const {
-        auto it = _values.find(std::string(key));
-        if (it != _values.end()) {
-            return it->second;
+        int index = _findValue(key);
+        if (index != -1) {
+            return _values.at(index).second;
         } else {
             throw CordException(loc.file_name(), loc.line(), "Key not found: " + std::string(key));
         }
@@ -604,11 +604,26 @@ public:
     template<typename T>
     Value get_or(std::string_view key, T fallback) const {
         static_assert(is_supported_type_v<T>, CORD_UNSUPPORTED_TYPE("result.get_or<T>()"));
-        auto it = _values.find(std::string(key));
-        if (it != _values.end()) {
-            return it->second;
+        int index = _findValue(key);
+        if (index != -1) {
+            return _values.at(index).second;
         }
         return Value(fallback);
+    }
+
+    /**
+     * @brief Sets the value associated with a key, or adds it if it doesn't exist.
+     * @param key The key to set.
+     * @param value The value to set.
+     * @return A reference to the Result object.
+     *
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
+    template<typename T>
+    Result& set(std::string_view key, T value) {
+        static_assert(is_supported_type_v<T>, CORD_UNSUPPORTED_TYPE("result.set<T>()"));
+        _insert_or_modify_value(key, Value(value));
+        return *this;
     }
 
     // Checks if there are any parsing errors
@@ -632,14 +647,53 @@ public:
         }
     }
 
+    // Gets a vector of cord::ParseError objects
     const std::vector<ParseError> getErrors() const {
         return _ec.getErrors();
     }
 
+    // Writes the parsed key-value pairs to a string in the format "key + delimiter + val\n"
+    // Yes we reuse the Schema delimiter here, because the Result is tied to the Schema that produced it
+    std::string write() const {
+        std::string output;
+        for (const auto& [key, value] : _values) {
+            output += key + _delimiter + value.toString() + "\n";
+        }
+        return output;
+    }
+
+    // Writes the parsed key-value pairs to a file in the format "key + delimiter + val\n"
+    // Yes we reuse the Schema delimiter here, because the Result is tied to the Schema that produced it
+    void writeFile(const std::string& filename) const {
+        std::ofstream file(filename);
+        if (!file.is_open())
+            throw CordException("Failed to open file for writing: " + filename);
+        file << write();
+    }
+
 private:
-    std::unordered_map<std::string, Value> _values;
+    std::vector<std::pair<std::string, Value>> _values;
     ErrorCollector _ec;
     std::string _filepath;
+    std::string _delimiter = "=";
+
+    // Finds the index of a key in the _values vector, returns -1 if not found
+    int _findValue(std::string_view key) const {
+        for (size_t i = 0; i < _values.size(); ++i) {
+            if (_values[i].first == key) return static_cast<int>(i);
+        }
+        return -1;
+    }
+
+    // Inserts or modifies a key-value pair in the _values vector
+    void _insert_or_modify_value(std::string_view key, const Value& value) {
+        int index = _findValue(key);
+        if (index != -1) {
+            _values[index].second = value;
+        } else {
+            _values.emplace_back(std::string(key), value);
+        }
+    }
 };
 
 /**
@@ -658,6 +712,7 @@ public:
     Result parse(const std::string_view input) {
         Result result;
         result._filepath = _filepath;
+        result._delimiter = _delimiter;
 
         // split input into lines
         std::vector<std::string_view> lines;
@@ -908,9 +963,8 @@ private:
     std::string _filepath;
 
     void checkFieldConstraints(Result& result, IField* field, size_t line) const {
-        auto it = result._values.find(field->getName());
-        if (it == result._values.end()) return;
-        auto err = field->checkConstraints(it->second);
+        if (!result.contains(field->getName())) return;
+        auto err = field->checkConstraints(result.get(field->getName()));
         if (err.has_value())
             result._ec.addError("Constraint violation for '" + field->getName() + "': " + *err, field->getName(), line);
     }
@@ -918,7 +972,7 @@ private:
     void ensureRequiredFieldsPresent(Result& result) const {
         for (const auto& field : _fields) {
             std::string name = field->getName();
-            if (field->isRequired() && result._values.find(name) == result._values.end()) {
+            if (field->isRequired() && !result.contains(name)) {
                 result._ec.addMissingRequiredKey(name);
             }
         }
@@ -928,8 +982,8 @@ private:
         for (const auto& field : _fields) {
             std::string name = field->getName();
             if (!field->hasDefault()) continue;
-            if (result._values.find(name) != result._values.end()) continue;
-            result._values.emplace(name, field->getDefault());
+            if (result.contains(name)) continue;
+            result._insert_or_modify_value(name, field->getDefault());
         }
     }
 
@@ -959,7 +1013,7 @@ private:
                            ParseResult<T> (Schema::*parse_fn)(std::string_view) const) const {
         auto res = (this->*parse_fn)(value_str);
         if (res.value.has_value()) {
-            result._values.insert_or_assign(field->getName(), Value(*res.value));
+            result._insert_or_modify_value(field->getName(), Value(*res.value));
             return true;
         }
         parse_error = res.error;
