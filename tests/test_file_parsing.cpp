@@ -121,3 +121,17 @@ TEST_CASE("set() adds new key not in original parse", "[file][write]") {
     CHECK(result.contains("extra"));
     CHECK(result.get("extra").as<int>() == 42);
 }
+
+TEST_CASE("write() preserves float precision (no trailing zeros)", "[file][write]") {
+    cord::Schema schema;
+    schema.add<float>("ratio");
+    schema.add<double>("scale");
+
+    auto result = schema.parse("ratio = 1.5\nscale = 3.14");
+    REQUIRE_FALSE(result.hasErrors());
+
+    std::string out = result.write();
+    // std::to_string produces "1.500000" / "3.140000" — check no trailing zeros
+    CHECK(out.find("ratio=1.5\n") != std::string::npos);
+    CHECK(out.find("scale=3.14\n") != std::string::npos);
+}
