@@ -441,8 +441,8 @@ private:
         if (delimiter.empty()) {
             throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
         }
-        if (delimiter == "\n") {
-            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be a newline character");
+        if (delimiter.find('\n') != std::string::npos) {
+            throw CordException(loc.file_name(), loc.line(), "Delimiter cannot contain a newline character");
         }
         if (delimiter == _comment_marker) {
             throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be the same as the comment marker");
@@ -452,8 +452,8 @@ private:
         if (marker.empty()) {
             throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be empty");
         }
-        if (marker == "\n") {
-            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be a newline character");
+        if (marker.find('\n') != std::string::npos) {
+            throw CordException(loc.file_name(), loc.line(), "Comment marker cannot contain a newline character");
         }
         if (marker == _delimiter) {
             throw CordException(loc.file_name(), loc.line(), "Comment marker cannot be the same as the delimiter");
