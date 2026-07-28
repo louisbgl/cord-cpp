@@ -156,6 +156,43 @@ TEST_CASE("Empty comment marker throws", "[schema]") {
     CHECK_THROWS_AS(schema.setCommentMarker(""), cord::CordException);
 }
 
+TEST_CASE("Delimiter and comment marker identical throws", "[schema]") {
+    cord::Schema schema;
+    schema.setDelimiter(":");
+    CHECK_THROWS_AS(schema.setCommentMarker(":"), cord::CordException);
+}
+
+TEST_CASE("Comment marker and delimiter identical throws (reverse order)", "[schema]") {
+    cord::Schema schema;
+    schema.setCommentMarker(";");
+    CHECK_THROWS_AS(schema.setDelimiter(";"), cord::CordException);
+}
+
+TEST_CASE("Empty key name in schema throws", "[schema]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<int>(""), cord::CordException);
+}
+
+TEST_CASE("Strict mode rejects duplicate keys", "[schema]") {
+    cord::Schema schema;
+    schema.setStrict(true);
+    schema.add<int>("port");
+
+    auto result = schema.parse("port = 8080\nport = 9090");
+    REQUIRE(result.hasErrors());
+    CHECK(result.getErrors()[0].message.find("port") != std::string::npos);
+}
+
+TEST_CASE("Lenient mode allows duplicate keys: last value wins", "[schema]") {
+    cord::Schema schema;
+    schema.setStrict(false);
+    schema.add<int>("port");
+
+    auto result = schema.parse("port = 8080\nport = 9090");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("port").as<int>() == 9090);
+}
+
 TEST_CASE("min() enforced for int", "[schema][constraints]") {
     cord::Schema schema;
     schema.add<int>("port").min(1024);
