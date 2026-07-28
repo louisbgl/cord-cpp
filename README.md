@@ -14,6 +14,7 @@ Header-only C++20 configuration parser with schema validation and fluent API.
 - **Fluent API**: chain `.required()`, `.default_()`, `.min()`, `.max()`, `.oneOf()`
 - **Error accumulation**: collect and inspect all errors at once
 - **Strict/lenient modes**: reject or ignore unknown keys
+- **Write-back**: modify parsed values and serialize back to string or file
 
 ## Config File Format
 
@@ -114,9 +115,15 @@ schema.add<int>("port").required();
 // Set default value (used when key is absent)
 schema.add<std::string>("host").default_("localhost");
 
-// Numeric range constraints (int, float, double only)
+// Numeric range constraints (int, float, double)
 schema.add<int>("port").min(1024).max(65535);
 schema.add<float>("ratio").min(0.0f).max(1.0f);
+
+// String length constraints
+schema.add<std::string>("username").min(3).max(32);
+
+// Vector element count constraints
+schema.add<std::vector<std::string>>("tags").min(1).max(10);
 
 // Restrict to a set of allowed values
 schema.add<std::string>("level").oneOf({"debug", "info", "warn", "error"});
@@ -178,6 +185,24 @@ std::string host = result.get("host").as<std::string>();
 
 // Safe fallback, fallback can be a runtime value
 int port = result.get_or("port", env == "prod" ? 443 : 8080).as<int>();
+```
+
+### Write-back
+
+```cpp
+// Modify a parsed value (or add a new key)
+result.set("port", 9090)
+      .set("host", std::string("example.com"));
+
+// Serialize to string (uses same delimiter as the schema)
+std::string config = result.write();
+
+// Write to file
+result.writeFile("output.conf");
+
+// Full round-trip: load, modify, save
+auto result = schema.parseFile("config.conf");
+result.set("high_score", 9999).writeFile("config.conf");
 ```
 
 ## License
