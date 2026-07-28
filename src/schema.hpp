@@ -108,14 +108,24 @@ public:
         }
     }
 
+    // Gets a vector of cord::ParseError objects
     const std::vector<ParseError> getErrors() const {
         return _ec.getErrors();
+    }
+
+    std::string write() const {
+        std::string output;
+        for (const auto& [key, value] : _values) {
+            output += key + _delimiter + value.toString() + "\n";
+        }
+        return output;
     }
 
 private:
     std::vector<std::pair<std::string, Value>> _values;
     ErrorCollector _ec;
     std::string _filepath;
+    std::string _delimiter = "=";
 
     // Finds the index of a key in the _values vector, returns -1 if not found
     int _findValue(std::string_view key) const {
@@ -152,6 +162,7 @@ public:
     Result parse(const std::string_view input) {
         Result result;
         result._filepath = _filepath;
+        result._delimiter = _delimiter;
 
         // split input into lines
         std::vector<std::string_view> lines;
