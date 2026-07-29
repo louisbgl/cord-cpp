@@ -500,6 +500,10 @@ private:
     std::string_view _removeInlineComment(std::string_view s) const {
         bool in_quotes = false;
         for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == '\\' && i + 1 < s.size() && s[i + 1] == '"') {
+                ++i; // skip escaped quote
+                continue;
+            }
             if (s[i] == '"') {
                 in_quotes = !in_quotes;
             } else if (s.substr(i, _comment_marker.length()) == _comment_marker && !in_quotes) {
