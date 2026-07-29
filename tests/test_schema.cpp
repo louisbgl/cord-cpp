@@ -431,6 +431,36 @@ TEST_CASE("min() greater than max() throws for vector count", "[schema][constrai
     CHECK_THROWS_AS(schema.add<std::vector<int>>("ids").min(5).max(2), cord::CordException);
 }
 
+TEST_CASE("min() greater than max() throws for double", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<double>("val").min(1.0).max(0.0), cord::CordException);
+}
+
+TEST_CASE("max() set before min(), min() greater throws for int", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<int>("port").max(10).min(100), cord::CordException);
+}
+
+TEST_CASE("max() set before min(), min() greater throws for float", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<float>("ratio").max(0.0f).min(1.0f), cord::CordException);
+}
+
+TEST_CASE("max() set before min(), min() greater throws for double", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<double>("val").max(0.0).min(1.0), cord::CordException);
+}
+
+TEST_CASE("max() set before min(), min() greater throws for string length", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<std::string>("name").max(3).min(10), cord::CordException);
+}
+
+TEST_CASE("max() set before min(), min() greater throws for vector count", "[schema][constraints]") {
+    cord::Schema schema;
+    CHECK_THROWS_AS(schema.add<std::vector<int>>("ids").max(2).min(5), cord::CordException);
+}
+
 TEST_CASE("oneOf() with empty list throws", "[schema][constraints]") {
     cord::Schema schema;
     CHECK_THROWS_AS(schema.add<std::string>("level").oneOf({}), cord::CordException);
