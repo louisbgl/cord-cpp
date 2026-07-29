@@ -36,14 +36,14 @@ struct VectorElements {
     "[CORD] Supported types: int, float, double, std::string, " \
     "std::vector<bool>, std::vector<int>, std::vector<float>, std::vector<double>, std::vector<std::string>\n"
 
-// Type trait to check if T is a numeric cord type
+// int, float, double — numeric constraints (min/max by value)
 template<typename T>
 constexpr bool is_supported_numeric_type_v =
     std::is_same_v<T, int> ||
     std::is_same_v<T, float> ||
     std::is_same_v<T, double>;
 
-// Type trait to check if T is a supported vector type
+// all five vector variants
 template<typename T>
 constexpr bool is_supported_vector_type_v =
     std::is_same_v<T, std::vector<bool>> ||
@@ -52,7 +52,9 @@ constexpr bool is_supported_vector_type_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
-// Type trait to check if T is a supported type, bool excluded (for min() and max())
+// every supported type except scalar bool — used by the size_t overloads of min()/max()
+// (string/vector accept a size constraint; scalar bool has no meaningful size)
+// note: vector<bool> is included — it supports element-count constraints
 template<typename T>
 constexpr bool is_supported_type_exclude_bool_v =
     std::is_same_v<T, int> ||
@@ -65,8 +67,8 @@ constexpr bool is_supported_type_exclude_bool_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
-// Type trait to check if T is a supported cord type
-// Also supports const char* and char* for convenience in result.get_or()
+// all supported cord types, plus const char* / char* which implicitly convert to std::string
+// (used by get_or() and set() so callers can pass string literals without an explicit cast)
 template<typename T>
 constexpr bool is_supported_type_v =
     std::is_same_v<T, bool> ||
@@ -107,9 +109,16 @@ std::string valueToString(const T& val) {
         return std::to_string(val);
     else if constexpr (is_supported_numeric_type_v<T>) // matches float and double
         return std::format("{:g}", val);
-    else if constexpr (std::is_same_v<typename T::value_type, bool>)
-        // vector<bool> handled separately — operator[] returns proxy, not bool ref
-        return "[" + [&]{ std::string s; for (size_t i = 0; i < val.size(); ++i) { s += (val[i] ? "true" : "false"); if (i < val.size()-1) s += ", "; } return s; }() + "]";
+    else if constexpr (std::is_same_v<typename T::value_type, bool>) {
+        // vector<bool> is special: operator[] returns a proxy object, not a bool&,
+        // so we can't pass elements directly to a recursive valueToString<bool> call
+        std::string s = "[";
+        for (size_t i = 0; i < val.size(); ++i) {
+            s += val[i] ? "true" : "false";
+            if (i < val.size() - 1) s += ", ";
+        }
+        return s + "]";
+    }
     else {
         // vector<int/float/double/string>
         using Elem = typename T::value_type;
