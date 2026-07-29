@@ -3,6 +3,7 @@
 #include <cctype>
 #include <string>
 #include <vector>
+#include <format>
 #include <optional>
 #include <type_traits>
 
@@ -102,8 +103,10 @@ std::string valueToString(const T& val) {
         return val ? "true" : "false";
     else if constexpr (std::is_same_v<T, std::string>)
         return "\"" + val + "\"";
-    else if constexpr (is_supported_numeric_type_v<T>)
+    else if constexpr (std::is_same_v<T, int>)
         return std::to_string(val);
+    else if constexpr (is_supported_numeric_type_v<T>) // matches float and double
+        return std::format("{:g}", val);
     else if constexpr (std::is_same_v<typename T::value_type, bool>)
         // vector<bool> handled separately — operator[] returns proxy, not bool ref
         return "[" + [&]{ std::string s; for (size_t i = 0; i < val.size(); ++i) { s += (val[i] ? "true" : "false"); if (i < val.size()-1) s += ", "; } return s; }() + "]";

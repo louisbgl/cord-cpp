@@ -217,6 +217,31 @@ TEST_CASE("Unquoted string produces error with reason", "[parsing][escape]") {
     CHECK(result.getErrors()[0].message.find("quoted") != std::string::npos);
 }
 
+TEST_CASE("Scientific notation parsed for float and double", "[parsing]") {
+    cord::Schema schema;
+    schema.add<float>("small");
+    schema.add<double>("large");
+
+    auto result = schema.parse("small = 2.5e-3\nlarge = 1e10");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK_THAT(result.get("small").as<float>(), Catch::Matchers::WithinRel(2.5e-3f, 1e-5f));
+    CHECK_THAT(result.get("large").as<double>(), Catch::Matchers::WithinRel(1e10, 1e-5));
+}
+
+TEST_CASE("Scientific notation round-trips through write()", "[parsing][write]") {
+    cord::Schema schema;
+    schema.add<float>("val");
+
+    // 1e10 exceeds {:.6g} threshold — write() produces "1e+10", parse must accept it back
+    auto result = schema.parse("val = 1e10");
+    REQUIRE_FALSE(result.hasErrors());
+
+    std::string out = result.write();
+    auto result2 = schema.parse(out);
+    REQUIRE_FALSE(result2.hasErrors());
+    CHECK_THAT(result2.get("val").as<float>(), Catch::Matchers::WithinRel(1e10f, 1e-5f));
+}
+
 TEST_CASE("Escape sequences in vector strings", "[parsing][escape]") {
     cord::Schema schema;
     schema.add<std::vector<std::string>>("tags");
