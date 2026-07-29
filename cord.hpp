@@ -115,8 +115,21 @@ template<typename T>
 std::string valueToString(const T& val) {
     if constexpr (std::is_same_v<T, bool>)
         return val ? "true" : "false";
-    else if constexpr (std::is_same_v<T, std::string>)
-        return "\"" + val + "\"";
+    else if constexpr (std::is_same_v<T, std::string>) {
+        // need to re escape escape sequences like a newline to \n
+        std::string s = "\"";
+        for (char c : val) {
+            switch (c) {
+                case '\\': s += "\\\\"; break;
+                case '\n': s += "\\n"; break;
+                case '\t': s += "\\t"; break;
+                case '"':  s += "\\\""; break;
+                default:   s += c; break;
+            }
+        }
+        s += "\"";
+        return s;
+    }
     else if constexpr (std::is_same_v<T, int>)
         return std::to_string(val);
     else if constexpr (is_supported_numeric_type_v<T>) // matches float and double
