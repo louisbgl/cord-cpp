@@ -32,8 +32,7 @@ friend class Schema;
 public:
     // Checks if a key exists in the result.
     bool contains(std::string_view key) const {
-        if (_findValue(key) != -1) return true;
-        return false;
+        return _findValue(key) != -1;
     }
 
     /**
@@ -110,7 +109,7 @@ public:
     }
 
     // Gets a vector of cord::ParseError objects
-    const std::vector<ParseError> getErrors() const {
+    std::vector<ParseError> getErrors() const {
         return _ec.getErrors();
     }
 
