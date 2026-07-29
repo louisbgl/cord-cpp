@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstring>
 #include <exception>
+#include <format>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>
@@ -47,14 +48,14 @@ struct VectorElements {
     std::string error;
 };
 
-// Type trait to check if T is a numeric cord type
+// int, float, double — numeric constraints (min/max by value)
 template<typename T>
 constexpr bool is_supported_numeric_type_v =
     std::is_same_v<T, int> ||
     std::is_same_v<T, float> ||
     std::is_same_v<T, double>;
 
-// Type trait to check if T is a supported vector type
+// all five vector variants
 template<typename T>
 constexpr bool is_supported_vector_type_v =
     std::is_same_v<T, std::vector<bool>> ||
@@ -63,7 +64,9 @@ constexpr bool is_supported_vector_type_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
-// Type trait to check if T is a supported type, bool excluded (for min() and max())
+// every supported type except scalar bool — used by the size_t overloads of min()/max()
+// (string/vector accept a size constraint; scalar bool has no meaningful size)
+// note: vector<bool> is included — it supports element-count constraints
 template<typename T>
 constexpr bool is_supported_type_exclude_bool_v =
     std::is_same_v<T, int> ||
@@ -76,8 +79,8 @@ constexpr bool is_supported_type_exclude_bool_v =
     std::is_same_v<T, std::vector<double>> ||
     std::is_same_v<T, std::vector<std::string>>;
 
-// Type trait to check if T is a supported cord type
-// Also supports const char* and char* for convenience in result.get_or()
+// all supported cord types, plus const char* / char* which implicitly convert to std::string
+// (used by get_or() and set() so callers can pass string literals without an explicit cast)
 template<typename T>
 constexpr bool is_supported_type_v =
     std::is_same_v<T, bool> ||
@@ -114,11 +117,20 @@ std::string valueToString(const T& val) {
         return val ? "true" : "false";
     else if constexpr (std::is_same_v<T, std::string>)
         return "\"" + val + "\"";
-    else if constexpr (is_supported_numeric_type_v<T>)
+    else if constexpr (std::is_same_v<T, int>)
         return std::to_string(val);
-    else if constexpr (std::is_same_v<typename T::value_type, bool>)
-        // vector<bool> handled separately — operator[] returns proxy, not bool ref
-        return "[" + [&]{ std::string s; for (size_t i = 0; i < val.size(); ++i) { s += (val[i] ? "true" : "false"); if (i < val.size()-1) s += ", "; } return s; }() + "]";
+    else if constexpr (is_supported_numeric_type_v<T>) // matches float and double
+        return std::format("{:g}", val);
+    else if constexpr (std::is_same_v<typename T::value_type, bool>) {
+        // vector<bool> is special: operator[] returns a proxy object, not a bool&,
+        // so we can't pass elements directly to a recursive valueToString<bool> call
+        std::string s = "[";
+        for (size_t i = 0; i < val.size(); ++i) {
+            s += val[i] ? "true" : "false";
+            if (i < val.size() - 1) s += ", ";
+        }
+        return s + "]";
+    }
     else {
         // vector<int/float/double/string>
         using Elem = typename T::value_type;
@@ -217,8 +229,6 @@ constexpr FieldType typeOf() {
         return FieldType::VECTOR_DOUBLE;
     } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
         return FieldType::VECTOR_STRING;
-    } else {
-        throw CordException("Unsupported type");
     }
 }
 
@@ -345,6 +355,7 @@ public:
     /**
      * @brief Gets the default value of the field.
      * @return The default value.
+     * @note Only call this after checking hasDefault() — behavior is undefined if no default is set.
      */
     Value getDefault() const override {
         return Value(_default_value.value());
@@ -371,7 +382,7 @@ public:
                 return "value " + valueToString(v) + " is longer than maximum length " + std::to_string(*_max_size);
         }
         if constexpr (is_supported_vector_type_v<T>) {
-            T v = value.as<T>();
+            const T& v = value.as<T>();
             if (_min_size.has_value() && v.size() < *_min_size)
                 return "vector has too few elements: got " + std::to_string(v.size()) + ", minimum " + std::to_string(*_min_size);
             if (_max_size.has_value() && v.size() > *_max_size)
@@ -387,6 +398,7 @@ public:
         return std::nullopt;
     }
 
+    /** @brief Returns a human-readable summary of active constraints (range and/or oneOf), or empty string if none. */
     std::string describeConstraints() const override {
         std::string range;
         std::string choices;
@@ -581,8 +593,7 @@ friend class Schema;
 public:
     // Checks if a key exists in the result.
     bool contains(std::string_view key) const {
-        if (_findValue(key) != -1) return true;
-        return false;
+        return _findValue(key) != -1;
     }
 
     /**
@@ -659,7 +670,7 @@ public:
     }
 
     // Gets a vector of cord::ParseError objects
-    const std::vector<ParseError> getErrors() const {
+    std::vector<ParseError> getErrors() const {
         return _ec.getErrors();
     }
 
@@ -909,6 +920,11 @@ public:
         if (name.empty()) {
             throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
         }
+        for (const auto& f : _fields) {
+            if (f->getName() == name) {
+                throw CordException(loc.file_name(), loc.line(), "Schema cannot have duplicate field names: " + name);
+            }
+        }
         auto field = std::make_unique<Field<T>>(name);
         Field<T>& ptr = *field;
         _fields.push_back(std::move(field));
@@ -1045,6 +1061,10 @@ private:
     std::string_view _removeInlineComment(std::string_view s) const {
         bool in_quotes = false;
         for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == '\\' && i + 1 < s.size() && s[i + 1] == '"') {
+                ++i; // skip escaped quote
+                continue;
+            }
             if (s[i] == '"') {
                 in_quotes = !in_quotes;
             } else if (s.substr(i, _comment_marker.length()) == _comment_marker && !in_quotes) {
@@ -1192,7 +1212,42 @@ private:
     }
 
     ParseResult<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
-        return _tryParseVector<std::string>(str, [this](std::string_view s) { return _tryParseString(s); });
+        if (str.empty() || str.front() != '[')
+            return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
+        if (str.find(']') == std::string_view::npos)
+            return {{}, "missing closing ']' in vector value"};
+
+        // Can't use _splitCommas here: commas inside quoted strings ("a,b") would be split wrongly.
+        // Scan char-by-char, collect quoted tokens, skip commas between them.
+        std::vector<std::string> result;
+        size_t i = 1; // skip '['
+        while (i < str.size() && str[i] != ']') {
+            // skip whitespace and commas between elements
+            while (i < str.size() && str[i] != ']' && (std::isspace(str[i]) || str[i] == ',')) ++i;
+            if (i >= str.size() || str[i] == ']') break;
+
+            if (str[i] != '"')
+                return {{}, "element at index " + std::to_string(result.size()) + ": string values must be quoted with \""};
+
+            // find the closing quote, respecting \" escapes
+            size_t token_start = i;
+            ++i; // skip opening '"'
+            while (i < str.size() && str[i] != ']') {
+                if (str[i] == '\\' && i + 1 < str.size()) { ++i; ++i; continue; }
+                if (str[i] == '"') break;
+                ++i;
+            }
+            if (i >= str.size() || str[i] != '"')
+                return {{}, "element at index " + std::to_string(result.size()) + ": unterminated string"};
+            ++i; // skip closing '"'
+
+            std::string_view token = str.substr(token_start, i - token_start);
+            auto parsed = _tryParseString(token);
+            if (!parsed.value.has_value())
+                return {{}, "element at index " + std::to_string(result.size()) + ": " + parsed.error};
+            result.push_back(std::move(*parsed.value));
+        }
+        return {result};
     }
 };
 
