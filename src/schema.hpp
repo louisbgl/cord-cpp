@@ -651,7 +651,42 @@ private:
     }
 
     ParseResult<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
-        return _tryParseVector<std::string>(str, [this](std::string_view s) { return _tryParseString(s); });
+        if (str.empty() || str.front() != '[')
+            return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
+        if (str.find(']') == std::string_view::npos)
+            return {{}, "missing closing ']' in vector value"};
+
+        // Can't use _splitCommas here: commas inside quoted strings ("a,b") would be split wrongly.
+        // Scan char-by-char, collect quoted tokens, skip commas between them.
+        std::vector<std::string> result;
+        size_t i = 1; // skip '['
+        while (i < str.size() && str[i] != ']') {
+            // skip whitespace and commas between elements
+            while (i < str.size() && str[i] != ']' && (std::isspace(str[i]) || str[i] == ',')) ++i;
+            if (i >= str.size() || str[i] == ']') break;
+
+            if (str[i] != '"')
+                return {{}, "element at index " + std::to_string(result.size()) + ": string values must be quoted with \""};
+
+            // find the closing quote, respecting \" escapes
+            size_t token_start = i;
+            ++i; // skip opening '"'
+            while (i < str.size() && str[i] != ']') {
+                if (str[i] == '\\' && i + 1 < str.size()) { ++i; ++i; continue; }
+                if (str[i] == '"') break;
+                ++i;
+            }
+            if (i >= str.size() || str[i] != '"')
+                return {{}, "element at index " + std::to_string(result.size()) + ": unterminated string"};
+            ++i; // skip closing '"'
+
+            std::string_view token = str.substr(token_start, i - token_start);
+            auto parsed = _tryParseString(token);
+            if (!parsed.value.has_value())
+                return {{}, "element at index " + std::to_string(result.size()) + ": " + parsed.error};
+            result.push_back(std::move(*parsed.value));
+        }
+        return {result};
     }
 };
 
