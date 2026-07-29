@@ -122,6 +122,17 @@ TEST_CASE("set() adds new key not in original parse", "[file][write]") {
     CHECK(result.get("extra").as<int>() == 42);
 }
 
+TEST_CASE("set() with const char* string literal", "[file][write]") {
+    cord::Schema schema;
+    schema.add<std::string>("host");
+
+    auto result = schema.parse(R"(host = "localhost")");
+    REQUIRE_FALSE(result.hasErrors());
+
+    result.set("host", "example.com");
+    CHECK(result.get("host").as<std::string>() == "example.com");
+}
+
 TEST_CASE("write() preserves float precision (no trailing zeros)", "[file][write]") {
     cord::Schema schema;
     schema.add<float>("ratio");

@@ -137,3 +137,78 @@ TEST_CASE("Vector with unquoted strings rejected", "[vectors]") {
     auto result = schema.parse("hosts = [server1, server2]");
     CHECK(result.hasErrors());
 }
+
+TEST_CASE("Vector<string> with escaped quotes inside elements", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("msgs");
+
+    auto result = schema.parse(R"(msgs = ["say \"hi\"", "ok"])");
+    REQUIRE_FALSE(result.hasErrors());
+    auto msgs = result.get("msgs").as<std::vector<std::string>>();
+    REQUIRE(msgs.size() == 2);
+    CHECK(msgs[0] == "say \"hi\"");
+    CHECK(msgs[1] == "ok");
+}
+
+TEST_CASE("Vector<string> with escaped backslash before comma", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("tags");
+
+    // "\\" is a literal backslash — should not escape the comma after it
+    auto result = schema.parse(R"(tags = ["a\\", "b"])");
+    REQUIRE_FALSE(result.hasErrors());
+    auto tags = result.get("tags").as<std::vector<std::string>>();
+    REQUIRE(tags.size() == 2);
+    CHECK(tags[0] == "a\\");
+    CHECK(tags[1] == "b");
+}
+
+TEST_CASE("Vector<string> write() round-trip with special chars", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("tags");
+
+    auto result = schema.parse(R"(tags = ["hello\tworld", "line1\nline2"])");
+    REQUIRE_FALSE(result.hasErrors());
+
+    std::string out = result.write();
+    auto result2 = schema.parse(out);
+    REQUIRE_FALSE(result2.hasErrors());
+    auto tags = result2.get("tags").as<std::vector<std::string>>();
+    REQUIRE(tags.size() == 2);
+    CHECK(tags[0] == "hello\tworld");
+    CHECK(tags[1] == "line1\nline2");
+}
+
+TEST_CASE("Inline comment after vector", "[vectors]") {
+    cord::Schema schema;
+    schema.setAllowComments(true);
+    schema.add<std::vector<std::string>>("tags");
+
+    auto result = schema.parse(R"(tags = ["a", "b"] # comment)");
+    REQUIRE_FALSE(result.hasErrors());
+    auto tags = result.get("tags").as<std::vector<std::string>>();
+    REQUIRE(tags.size() == 2);
+    CHECK(tags[0] == "a");
+    CHECK(tags[1] == "b");
+}
+
+TEST_CASE("Empty string element in vector<string>", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("tags");
+
+    auto result = schema.parse(R"(tags = ["", "foo"])");
+    REQUIRE_FALSE(result.hasErrors());
+    auto tags = result.get("tags").as<std::vector<std::string>>();
+    REQUIRE(tags.size() == 2);
+    CHECK(tags[0] == "");
+    CHECK(tags[1] == "foo");
+}
+
+TEST_CASE("oneOf with string containing spaces", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::string>("level").oneOf({"hello world", "foo"});
+
+    auto result = schema.parse(R"(level = "hello world")");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK(result.get("level").as<std::string>() == "hello world");
+}
