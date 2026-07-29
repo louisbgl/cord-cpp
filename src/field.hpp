@@ -41,8 +41,6 @@ constexpr FieldType typeOf() {
         return FieldType::VECTOR_DOUBLE;
     } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
         return FieldType::VECTOR_STRING;
-    } else {
-        throw CordException("Unsupported type");
     }
 }
 
@@ -169,6 +167,7 @@ public:
     /**
      * @brief Gets the default value of the field.
      * @return The default value.
+     * @note Only call this after checking hasDefault() — behavior is undefined if no default is set.
      */
     Value getDefault() const override {
         return Value(_default_value.value());
@@ -195,7 +194,7 @@ public:
                 return "value " + valueToString(v) + " is longer than maximum length " + std::to_string(*_max_size);
         }
         if constexpr (is_supported_vector_type_v<T>) {
-            T v = value.as<T>();
+            const T& v = value.as<T>();
             if (_min_size.has_value() && v.size() < *_min_size)
                 return "vector has too few elements: got " + std::to_string(v.size()) + ", minimum " + std::to_string(*_min_size);
             if (_max_size.has_value() && v.size() > *_max_size)
@@ -211,6 +210,7 @@ public:
         return std::nullopt;
     }
 
+    /** @brief Returns a human-readable summary of active constraints (range and/or oneOf), or empty string if none. */
     std::string describeConstraints() const override {
         std::string range;
         std::string choices;
