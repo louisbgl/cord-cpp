@@ -8,9 +8,9 @@ add_library(cord INTERFACE)
 
 option(CORD_SINGLE_HEADER "Test against generated root cord.hpp instead of src/" OFF)
 if(CORD_SINGLE_HEADER)
-    target_include_directories(cord INTERFACE ${CMAKE_SOURCE_DIR})
+    target_include_directories(cord INTERFACE ${PROJECT_SOURCE_DIR})
 else()
-    target_include_directories(cord INTERFACE ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(cord INTERFACE ${PROJECT_SOURCE_DIR}/src)
 endif()
 
 if(NOT PROJECT_IS_TOP_LEVEL)
