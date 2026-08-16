@@ -13,8 +13,18 @@ else()
     target_include_directories(cord INTERFACE ${CMAKE_SOURCE_DIR}/src)
 endif()
 
-option(CORD_BUILD_TESTS    "Build tests"    ON)
-option(CORD_BUILD_EXAMPLES "Build examples" ON)
+if(NOT PROJECT_IS_TOP_LEVEL)
+    set(CORD_DEFAULT_BUILD_TESTS OFF)
+    set(CORD_DEFAULT_BUILD_EXAMPLES OFF)
+    set(CORD_DEFAULT_BUILD_BENCHMARKS OFF)
+else()
+    set(CORD_DEFAULT_BUILD_TESTS ON)
+    set(CORD_DEFAULT_BUILD_EXAMPLES ON)
+    set(CORD_DEFAULT_BUILD_BENCHMARKS ON)
+endif()
+
+option(CORD_BUILD_TESTS    "Build tests"    ${CORD_DEFAULT_BUILD_TESTS})
+option(CORD_BUILD_EXAMPLES "Build examples" ${CORD_DEFAULT_BUILD_EXAMPLES})
 
 option(CORD_COVERAGE "Enable coverage reporting" OFF)
 
@@ -53,4 +63,17 @@ endif()
 
 if(CORD_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+option(CORD_BUILD_BENCHMARKS "Build benchmarks" ${CORD_DEFAULT_BUILD_BENCHMARKS})
+
+if(CORD_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+
+    add_custom_target(run_benchmarks
+        COMMAND bench_speed
+        DEPENDS bench_speed
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/benchmarks
+        COMMENT "Running benchmarks"
+    )
 endif()
