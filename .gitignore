@@ -41,3 +41,8 @@ examples/writing/new_save.conf
 # Markdown (keep only README)
 *.md
 !README.md
+
+#Benchmarks
+benchmarks/*
+!benchmarks/*.cpp
+!benchmarks/CMakeLists.txt
