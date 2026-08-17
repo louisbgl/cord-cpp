@@ -118,7 +118,21 @@ cmake --build build --target bench_speed
 
 ### Memory
 
-TODO
+Static stack sizes:
+
+- **Schema**: 128 bytes
+- **Result**: 136 bytes
+- **Value**: 48 bytes
+
+Heap allocations scale with schema size and parsed data (unique_ptr per field, string/vector storage).
+
+Run yourself:
+
+```bash
+cmake -S . -B build
+cmake --build build --target bench_memory
+./build/benchmarks/bench_memory
+```
 
 ### vs Handcrafted Parser
 
