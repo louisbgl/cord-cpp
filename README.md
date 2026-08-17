@@ -1,5 +1,11 @@
 # cord, a Config Reader
 
+[![Tests](https://github.com/louisbgl/cord-cpp/actions/workflows/test.yml/badge.svg)](https://github.com/louisbgl/cord-cpp/actions)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
+![Header-only](https://img.shields.io/badge/header--only-yes-brightgreen.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![parse speed](https://img.shields.io/badge/parse%20speed-~42%C2%B5s-green.svg)
+
 Header-only C++20 configuration parser with schema validation and fluent API.
 
 ## Requirements
@@ -89,6 +95,34 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
+
+## Benchmarks
+
+All benchmarks measured on coldstart (single parse per run).   
+Each benchmark binary supports `-h` for full options, thanks to [clap](https://github.com/lucaspujol/clap).
+
+### Speed
+
+Averaged over 10,000 runs:
+
+- **Small config (10 keys)**: ~42 µs per parse
+- **Large config (100 keys)**: ~290 µs per parse
+
+Run yourself:
+
+```bash
+cmake -S . -B build
+cmake --build build --target bench_speed
+./build/benchmarks/bench_speed
+```
+
+### Memory
+
+TODO
+
+### vs Handcrafted Parser
+
+TODO
 
 ## API Reference
 
