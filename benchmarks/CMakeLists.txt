@@ -9,7 +9,7 @@ FetchContent_Declare(stu
     GIT_TAG main)
 FetchContent_MakeAvailable(stu)
 
-set(BENCHMARKS bench_speed)
+set(BENCHMARKS bench_speed bench_memory bench_vs_handcrafted)
 
 foreach(BENCH ${BENCHMARKS})
     add_executable(${BENCH} ${BENCH}.cpp)
