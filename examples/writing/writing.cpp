@@ -4,7 +4,7 @@
 
 // I recommend peeking at examples/simplest/simplest.cpp first :)
 
-// cord results are not read-only — you can modify values and write them back to disk
+// cord results are not read-only, you can modify values and write them back to disk
 
 int main() {
     cord::Schema schema;
