@@ -12,7 +12,7 @@ endif()
 
 add_library(cord INTERFACE)
 
-option(CORD_SINGLE_HEADER "Test against generated root cord.hpp instead of src/" OFF)
+option(CORD_SINGLE_HEADER "Test against generated root cord.hpp instead of src/" ON)
 if(CORD_SINGLE_HEADER)
     target_include_directories(cord INTERFACE ${PROJECT_SOURCE_DIR})
 else()
