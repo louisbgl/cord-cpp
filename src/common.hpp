@@ -1,5 +1,7 @@
 #pragma once
 
+#include "struct_traits.hpp"
+
 #include <cctype>
 #include <string>
 #include <vector>
@@ -96,7 +98,9 @@ constexpr bool is_supported_value_type_v =
     std::is_same_v<T, std::vector<int>> ||
     std::is_same_v<T, std::vector<float>> ||
     std::is_same_v<T, std::vector<double>> ||
-    std::is_same_v<T, std::vector<std::string>>;
+    std::is_same_v<T, std::vector<std::string>> ||
+    is_custom_struct_v<T> ||
+    is_vector_of_custom_struct_v<T>;
 
 // Converts any supported cord type to its string representation
 template<typename T>
@@ -157,7 +161,9 @@ enum class FieldType {
     VECTOR_INT,
     VECTOR_FLOAT,
     VECTOR_DOUBLE,
-    VECTOR_STRING
+    VECTOR_STRING,
+    CUSTOM, // a user defined custom POD struct type
+    VECTOR_CUSTOM,
 };
 
 // Lowercases a string_view into a new std::string
@@ -180,6 +186,8 @@ inline std::string fieldTypeName(FieldType type) {
         case FieldType::VECTOR_FLOAT:  return "vector<float>";
         case FieldType::VECTOR_DOUBLE: return "vector<double>";
         case FieldType::VECTOR_STRING: return "vector<string>";
+        case FieldType::CUSTOM:        return "custom struct";
+        case FieldType::VECTOR_CUSTOM: return "vector<custom struct>";
     }
     return "unknown"; // unreachable
 }
