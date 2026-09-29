@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <initializer_list>
 #include <source_location>
 #include <string>
@@ -11,6 +12,7 @@
 
 #include "common.hpp"
 #include "exception.hpp"
+#include "struct_value.hpp"
 
 namespace cord {
 
@@ -21,27 +23,32 @@ namespace cord {
 */
 template<typename T>
 constexpr FieldType typeOf() {
-    if constexpr (std::is_same_v<T, bool>) {
+    if constexpr (std::is_same_v<T, bool>)
         return FieldType::BOOL;
-    } else if constexpr (std::is_same_v<T, int>) {
+    else if constexpr (std::is_same_v<T, int>)
         return FieldType::INT;
-    } else if constexpr (std::is_same_v<T, float>) {
+    else if constexpr (std::is_same_v<T, float>)
         return FieldType::FLOAT;
-    } else if constexpr (std::is_same_v<T, double>) {
+    else if constexpr (std::is_same_v<T, double>)
         return FieldType::DOUBLE;
-    } else if constexpr (std::is_same_v<T, std::string>) {
+    else if constexpr (std::is_same_v<T, std::string>)
         return FieldType::STRING;
-    } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+    else if constexpr (std::is_same_v<T, std::vector<bool>>)
         return FieldType::VECTOR_BOOL;
-    } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+    else if constexpr (std::is_same_v<T, std::vector<int>>)
         return FieldType::VECTOR_INT;
-    } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+    else if constexpr (std::is_same_v<T, std::vector<float>>)
         return FieldType::VECTOR_FLOAT;
-    } else if constexpr (std::is_same_v<T, std::vector<double>>) {
+    else if constexpr (std::is_same_v<T, std::vector<double>>)
         return FieldType::VECTOR_DOUBLE;
-    } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+    else if constexpr (std::is_same_v<T, std::vector<std::string>>)
         return FieldType::VECTOR_STRING;
-    }
+    else if constexpr (is_custom_struct_v<T>)
+        return FieldType::CUSTOM;
+    else if constexpr (is_vector_of_custom_struct_v<T>)
+        return FieldType::VECTOR_CUSTOM;
+    else
+        static_assert(false, "typeOf<T>() called with unsupported type T");
 }
 
 /**
@@ -54,6 +61,10 @@ public:
     template<typename T>
     Value(T value) : _value(value) {}
 
+    // Special overloads for char* and const char* to convert to std::string (convenience)
+    Value(const char* value) : _value(std::string(value)) {}
+    Value(char* value) : _value(std::string(value)) {}
+
     /**
      * @brief Converts the value to the specified type.
      * @tparam T The type to convert to.
@@ -65,7 +76,12 @@ public:
     T as(std::source_location loc = std::source_location::current()) const {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         try {
-            return std::get<T>(_value);
+            if constexpr (std::is_same_v<T, StructValue>)
+                return std::get<StructValue>(_value);
+            else if constexpr (is_vector_of_custom_struct_v<T>)
+                return std::get<std::vector<StructValue>>(_value);
+            else
+                return std::get<T>(_value);
         } catch (const std::bad_variant_access&) {
             throw CordException(loc.file_name(), loc.line(), "Type mismatch in as<T>(): value holds a different type");
         }
@@ -88,7 +104,9 @@ public:
             case 7: return FieldType::VECTOR_FLOAT;
             case 8: return FieldType::VECTOR_DOUBLE;
             case 9: return FieldType::VECTOR_STRING;
-            default: throw CordException("Unknown type");
+            case 10: return FieldType::CUSTOM;
+            case 11: return FieldType::VECTOR_CUSTOM;
+            default: throw CordException("Value::getType(): Unknown type");
         }
     }
 
@@ -109,14 +127,17 @@ public:
             case 7: return valueToString(std::get<std::vector<float>>(_value));
             case 8: return valueToString(std::get<std::vector<double>>(_value));
             case 9: return valueToString(std::get<std::vector<std::string>>(_value));
-            default: throw CordException("Unknown type");
+            case 10: return valueToString(std::get<StructValue>(_value));
+            case 11: return valueToString(std::get<std::vector<StructValue>>(_value));
+            default: throw CordException("Value::toString(): Unknown type");
         }
     }
 
 private:
     std::variant<bool, int, float, double, std::string,
         std::vector<bool>, std::vector<int>, std::vector<float>,
-        std::vector<double>, std::vector<std::string>
+        std::vector<double>, std::vector<std::string>,
+        StructValue, std::vector<StructValue> // <- supports custom structs and vectors of them
     > _value;
 };
 
