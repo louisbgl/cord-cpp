@@ -248,6 +248,10 @@ public:
                     parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorDouble); break;
                 case FieldType::VECTOR_STRING:
                     parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorString); break;
+                case FieldType::CUSTOM:
+                    assert(false && "CUSTOM type parsing not implemented yet"); break;
+                case FieldType::VECTOR_CUSTOM:
+                    assert(false && "VECTOR_CUSTOM type parsing not implemented yet"); break;
             }
 
             if (!parsed) {
@@ -286,12 +290,12 @@ public:
         size_t max_type_len = 0;
         size_t max_name_len = 0;
         for (const auto& f : _fields) {
-            max_type_len = std::max(max_type_len, fieldTypeName(f->getType()).size());
+            max_type_len = std::max(max_type_len, f->getTypeName().size());
             max_name_len = std::max(max_name_len, f->getName().size());
         }
 
         auto print_field = [&](const std::unique_ptr<IField>& f) {
-            std::string type = fieldTypeName(f->getType());
+            std::string type = f->getTypeName();
             std::string name = f->getName();
             std::cout << "  " << type << std::string(max_type_len - type.size() + 2, ' ');
             std::cout << name;
