@@ -19,6 +19,7 @@
 #include "field.hpp"
 #include "errors.hpp"
 #include "exception.hpp"
+#include "custom_struct.hpp"
 
 namespace cord {
 
@@ -505,7 +506,7 @@ private:
         return s;
     }
 
-    std::optional<Value> _parseFieldValue(std::string_view str, IField* field, std::string& error) const {
+    std::optional<Value> _parseFieldValue(std::string_view str, const IField* field, std::string& error) const {
         // lambda for convenience
         auto parse = [&error]<typename T>(const ParseResult<T>& res) -> std::optional<Value> {
             if (!res.value.has_value()) {
@@ -752,6 +753,35 @@ private:
             result.emplace_back(key, value);
         }
         return {result, ""};
+    }
+
+    template<typename T>
+    ParseResult<StructValue> _tryParseCustomObject(
+        std::string_view str,
+        const CustomStruct<T>* schema
+    ) const {
+        auto extracted = _extractObjectElements(str);
+        if (!extracted.error.empty()) return {{}, extracted.error};
+
+        T instance = schema->create();
+        for (const auto& [key, value_str] : extracted.items) {
+            IField* field = nullptr;
+            for (const auto& f : schema->getFields()) {
+                if (f->getName() == key) {
+                    field = f.get();
+                    break;
+                }
+            }
+            if (!field) {
+                return {{}, "unexpected key in custom object: \"" + std::string(key) +"\""};
+            }
+
+            std::string error;
+            auto val = _parseFieldValue(value_str, field, error);
+            if (!val) return {{}, error};
+            schema->setField(&instance, field->getName(), *val);
+        }
+        return {StructValue(std::move(instance)), ""};
     }
 };
 
