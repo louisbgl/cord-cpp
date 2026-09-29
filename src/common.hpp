@@ -1,7 +1,9 @@
 #pragma once
 
 #include "struct_traits.hpp"
+#include "struct_value.hpp"
 
+#include <cassert>
 #include <cctype>
 #include <string>
 #include <vector>
@@ -126,6 +128,8 @@ std::string valueToString(const T& val) {
         return std::to_string(val);
     else if constexpr (is_supported_numeric_type_v<T>) // matches float and double
         return std::format("{:g}", val);
+    else if constexpr (std::is_same_v<T, StructValue>)
+        assert(false && "valueToString<StructValue>(): not implemented yet");
     else if constexpr (std::is_same_v<typename T::value_type, bool>) {
         // vector<bool> is special: operator[] returns a proxy object, not a bool&,
         // so we can't pass elements directly to a recursive valueToString<bool> call
@@ -137,7 +141,7 @@ std::string valueToString(const T& val) {
         return s + "]";
     }
     else {
-        // vector<int/float/double/string>
+        // vector form of supported types, recurse
         using Elem = typename T::value_type;
         std::string s = "[";
         for (size_t i = 0; i < val.size(); ++i) {
