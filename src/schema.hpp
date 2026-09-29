@@ -610,6 +610,42 @@ private:
         return result;
     }
 
+    // Split on commas, but skip commas inside quotes or braces
+    std::vector<std::string_view> _splitCommasAware(std::string_view str) const {
+        std::vector<std::string_view> result;
+        size_t start = 0;
+        bool in_quotes = false;
+        int brace_depth = 0;
+
+        for (size_t i = 0; i < str.size(); ++i) {
+            char c = str[i];
+
+            // Handle escape sequences
+            if (c == '\\' && i + 1 < str.size() && in_quotes) {
+                ++i;
+                continue;
+            }
+
+            if (c == '"') in_quotes = !in_quotes;
+            if (!in_quotes) {
+                if (c == '{') ++brace_depth;
+                if (c == '}') --brace_depth;
+            }
+
+            if (c == ',' && !in_quotes && brace_depth == 0) {
+                std::string_view item = _trim(str.substr(start, i - start));
+                result.push_back(item);
+                start = i + 1;
+            }
+        }
+
+        if (start < str.size()) {
+            std::string_view item = _trim(str.substr(start));
+            result.push_back(item);
+        }
+        return result;
+    }
+
     VectorElements _extractVectorElements(std::string_view str) const {
         if (str.empty() || str.front() != '[')
             return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
@@ -657,37 +693,22 @@ private:
     ParseResult<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
         if (str.empty() || str.front() != '[')
             return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
-        if (str.find(']') == std::string_view::npos)
+
+        size_t close_bracket = str.find(']');
+        if (close_bracket == std::string_view::npos)
             return {{}, "missing closing ']' in vector value"};
 
-        // Can't use _splitCommas here: commas inside quoted strings ("a,b") would be split wrongly.
-        // Scan char-by-char, collect quoted tokens, skip commas between them.
+        std::string_view inner = _trim(str.substr(1, close_bracket - 1));
+        if (inner.empty()) return {std::vector<std::string>{}};
+
+        // Use quote-aware splitting
+        auto elements = _splitCommasAware(inner);
+
         std::vector<std::string> result;
-        size_t i = 1; // skip '['
-        while (i < str.size() && str[i] != ']') {
-            // skip whitespace and commas between elements
-            while (i < str.size() && str[i] != ']' && (std::isspace(str[i]) || str[i] == ',')) ++i;
-            if (i >= str.size() || str[i] == ']') break;
-
-            if (str[i] != '"')
-                return {{}, "element at index " + std::to_string(result.size()) + ": string values must be quoted with \""};
-
-            // find the closing quote, respecting \" escapes
-            size_t token_start = i;
-            ++i; // skip opening '"'
-            while (i < str.size() && str[i] != ']') {
-                if (str[i] == '\\' && i + 1 < str.size()) { ++i; ++i; continue; }
-                if (str[i] == '"') break;
-                ++i;
-            }
-            if (i >= str.size() || str[i] != '"')
-                return {{}, "element at index " + std::to_string(result.size()) + ": unterminated string"};
-            ++i; // skip closing '"'
-
-            std::string_view token = str.substr(token_start, i - token_start);
-            auto parsed = _tryParseString(token);
+        for (size_t i = 0; i < elements.size(); ++i) {
+            auto parsed = _tryParseString(elements[i]);
             if (!parsed.value.has_value())
-                return {{}, "element at index " + std::to_string(result.size()) + ": " + parsed.error};
+                return {{}, "element at index " + std::to_string(i) + ": " + parsed.error};
             result.push_back(std::move(*parsed.value));
         }
         return {result};
