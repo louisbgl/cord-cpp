@@ -128,6 +128,7 @@ public:
     virtual ~IField() = default;
 
     virtual std::string getName() const = 0;
+    virtual std::string getTypeName() const = 0;
     virtual FieldType getType() const = 0;
     virtual bool hasDefault() const = 0;
     virtual Value getDefault() const = 0;
@@ -152,6 +153,10 @@ public:
     // Gets the name of the field
     std::string getName() const override {
         return _name;
+    }
+
+    std::string getTypeName() const override {
+        return fieldTypeName(getType());
     }
 
     // Gets the type of the field
