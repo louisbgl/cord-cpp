@@ -456,6 +456,11 @@ private:
         std::string error;
     };
 
+    struct ObjectElements {
+        std::vector<std::pair<std::string_view, std::string_view>> items;
+        std::string error;
+    };
+
     void _ensureDelimiterOkay(const std::string& delimiter, std::source_location loc) const {
         if (delimiter.empty()) {
             throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
@@ -723,6 +728,31 @@ private:
             result.push_back(std::move(*parsed.value));
         }
         return {result};
+    }
+
+    ObjectElements _extractObjectElements(std::string_view str) const {
+        if (str.empty() || str.front() != '{')
+            return {{}, "expected '{' to open object, got: \"" + std::string(str) + "\""};
+
+        size_t close_brace = str.find('}');
+        if (close_brace == std::string_view::npos)
+            return {{}, "missing closing '}' in object value"};
+
+        std::string_view inner = _trim(str.substr(1, close_brace - 1));
+        if (inner.empty()) return {{}, ""}; // empty object valid at this point
+
+        auto pairs = _splitCommasAware(inner);
+        std::vector<std::pair<std::string_view, std::string_view>> result;
+        for (auto& segment : pairs) {
+            size_t delim_pos = segment.find(_delimiter);
+            if (delim_pos == std::string_view::npos)
+                return {{}, "missing delimiter (" + _delimiter + ") in field: \"" + std::string(segment) + "\""};
+
+            std::string_view key = _trim(segment.substr(0, delim_pos));
+            std::string_view value = _trim(segment.substr(delim_pos + _delimiter.length()));
+            result.emplace_back(key, value);
+        }
+        return {result, ""};
     }
 };
 
