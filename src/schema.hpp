@@ -445,6 +445,17 @@ private:
     std::string _comment_marker = "#";
     std::string _filepath;
 
+    template<typename T>
+    struct ParseResult {
+        std::optional<T> value;
+        std::string error = "";
+    };
+
+    struct VectorElements {
+        std::vector<std::string_view> items;
+        std::string error;
+    };
+
     void _ensureDelimiterOkay(const std::string& delimiter, std::source_location loc) const {
         if (delimiter.empty()) {
             throw CordException(loc.file_name(), loc.line(), "Delimiter cannot be empty");
