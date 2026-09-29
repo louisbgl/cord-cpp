@@ -225,40 +225,12 @@ public:
                 continue;
             }
 
-            bool parsed = false;
-            std::string parse_error;
-            switch (field->getType()) {
-                case FieldType::BOOL:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseBool); break;
-                case FieldType::STRING:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseString); break;
-                case FieldType::INT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseInt); break;
-                case FieldType::FLOAT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseFloat); break;
-                case FieldType::DOUBLE:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseDouble); break;
-                case FieldType::VECTOR_BOOL:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorBool); break;
-                case FieldType::VECTOR_INT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorInt); break;
-                case FieldType::VECTOR_FLOAT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorFloat); break;
-                case FieldType::VECTOR_DOUBLE:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorDouble); break;
-                case FieldType::VECTOR_STRING:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorString); break;
-                case FieldType::CUSTOM:
-                    assert(false && "CUSTOM type parsing not implemented yet"); break;
-                case FieldType::VECTOR_CUSTOM:
-                    assert(false && "VECTOR_CUSTOM type parsing not implemented yet"); break;
-            }
-
-            if (!parsed) {
-                std::string msg = "Invalid value for '" + std::string(key) + "'";
-                if (!parse_error.empty()) msg += ": " + parse_error;
-                result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
+            std::string error;
+            auto val = _parseFieldValue(value_str, field, error);
+            if (!val) {
+                result._ec.addError("Invalid value for '" + std::string(key) + "': " + error, std::nullopt, static_cast<int>(i + 1));
             } else {
+                result._insert_or_modify_value(field->getName(), *val);
                 _checkFieldConstraints(result, field, i + 1);
             }
         }
@@ -531,6 +503,33 @@ private:
             }
         }
         return s;
+    }
+
+    std::optional<Value> _parseFieldValue(std::string_view str, IField* field, std::string& error) const {
+        // lambda for convenience
+        auto parse = [&error]<typename T>(const ParseResult<T>& res) -> std::optional<Value> {
+            if (!res.value.has_value()) {
+                error = res.error;
+                return std::nullopt;
+            }
+            return Value(*res.value);
+        };
+
+        switch(field->getType()) {
+            case FieldType::BOOL:           return parse(_tryParseBool(str));
+            case FieldType::STRING:         return parse(_tryParseString(str));
+            case FieldType::INT:            return parse(_tryParseInt(str));
+            case FieldType::FLOAT:          return parse(_tryParseFloat(str));
+            case FieldType::DOUBLE:         return parse(_tryParseDouble(str));
+            case FieldType::VECTOR_BOOL:    return parse(_tryParseVectorBool(str));
+            case FieldType::VECTOR_INT:     return parse(_tryParseVectorInt(str));
+            case FieldType::VECTOR_FLOAT:   return parse(_tryParseVectorFloat(str));
+            case FieldType::VECTOR_DOUBLE:  return parse(_tryParseVectorDouble(str));
+            case FieldType::VECTOR_STRING:  return parse(_tryParseVectorString(str));
+            case FieldType::CUSTOM:         assert(false && "CUSTOM type parsing not implemented yet"); return std::nullopt;
+            case FieldType::VECTOR_CUSTOM:  assert(false && "VECTOR_CUSTOM type parsing not implemented yet"); return std::nullopt;
+        }
+        return std::nullopt;
     }
 
     template<typename T>
