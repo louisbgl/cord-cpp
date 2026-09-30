@@ -76,12 +76,24 @@ public:
     T as(std::source_location loc = std::source_location::current()) const {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         try {
-            if constexpr (std::is_same_v<T, StructValue>)
+            if constexpr (std::is_same_v<T, StructValue>) {
                 return std::get<StructValue>(_value);
-            else if constexpr (is_vector_of_custom_struct_v<T>)
-                return std::get<std::vector<StructValue>>(_value);
-            else
+            }
+            else if constexpr (is_custom_struct_v<T>) {
+                // Extract StructValue, unwrap to T
+                return std::get<StructValue>(_value).as<T>();
+            }
+            else if constexpr (is_vector_of_custom_struct_v<T>) {
+                // Extract vector<StructValue>, convert each to T::value_type
+                const auto& vec = std::get<std::vector<StructValue>>(_value);
+                std::vector<typename T::value_type> result;
+                for (const auto& sv : vec)
+                    result.push_back(sv.as<typename T::value_type>());
+                return result;
+            }
+            else {
                 return std::get<T>(_value);
+            }
         } catch (const std::bad_variant_access&) {
             throw CordException(loc.file_name(), loc.line(), "Type mismatch in as<T>(): value holds a different type");
         }
@@ -367,6 +379,54 @@ private:
     std::optional<size_t> _min_size = std::nullopt;
     std::optional<size_t> _max_size = std::nullopt;
     std::optional<std::vector<T>> _allowed_values = std::nullopt;
+};
+
+// Forward declare for CustomField
+class Schema;
+template<typename T> class CustomStruct;
+
+/**
+ * @brief Base class for custom struct fields (type erasure)
+ */
+class CustomFieldBase : public IField {
+public:
+    virtual ParseResult<StructValue> parseCustom(std::string_view str, const Schema* s) const = 0;
+};
+
+/**
+ * @brief Field representing a custom struct type
+ */
+template<typename T>
+class CustomField : public CustomFieldBase {
+public:
+    // Defined in schema.hpp after Schema is complete
+    CustomField(std::string name, const CustomStruct<T>& schema);
+
+    // Defined in schema.hpp after Schema is complete
+    ParseResult<StructValue> parseCustom(std::string_view str, const Schema* s) const override;
+
+    std::string getName() const override { return _name; }
+    FieldType getType() const override { return FieldType::CUSTOM; }
+    std::string getTypeName() const override { return _schema_name; }
+
+    bool hasDefault() const override { return _default_value.has_value(); }
+    Value getDefault() const override { return Value(StructValue(*_default_value)); }
+    bool isRequired() const override { return _required; }
+
+    std::optional<std::string> checkConstraints(const Value&) const override {
+        return std::nullopt;
+    }
+
+    std::string describeConstraints() const override { return ""; }
+
+    std::string getSchemaName() const { return _schema_name; }
+
+private:
+    std::string _name;
+    std::string _schema_name;
+    bool _required = false;
+    std::optional<T> _default_value = std::nullopt;
+    CustomStruct<T> _schema;
 };
 
 } // namespace cord

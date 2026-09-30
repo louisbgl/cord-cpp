@@ -165,6 +165,8 @@ private:
  * @note Compile-time checks are performed to ensure that only supported types are used.
  */
 class Schema {
+    template<typename T> friend class CustomField;  // needs access to _tryParseCustomObject
+
 public:
     /**
      * @brief Parses the input string according to the schema.
@@ -348,6 +350,35 @@ public:
     }
 
     /**
+     * @brief Adds a custom field to the schema
+     * @tparam T The type of the custom field
+     * @param name The name of the field
+     * @param custom_struct The custom struct to use for the field
+     * @param loc The source location for error reporting (default: current location)
+     * @return A reference to the added custom field
+     *
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
+    template<typename T>
+    CustomField<T>& add(std::string name, CustomStruct<T>& custom_struct,
+                  std::source_location loc = std::source_location::current()) {
+        static_assert(is_custom_struct_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<T>(CustomStruct<T>)"));
+        if (name.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
+        }
+        for (const auto& f : _fields) {
+            if (f->getName() == name) {
+                throw CordException(loc.file_name(), loc.line(), "Schema cannot have duplicate field names: " + name);
+            }
+        }
+
+        auto field = std::make_unique<CustomField<T>>(name, custom_struct);
+        CustomField<T>& ptr = *field;
+        _fields.push_back(std::move(field));
+        return ptr;
+    }
+
+    /**
      * @brief Sets the schema to strict mode
      * @param strict Whether to enable strict mode
      *
@@ -417,12 +448,6 @@ private:
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
     std::string _filepath;
-
-    template<typename T>
-    struct ParseResult {
-        std::optional<T> value;
-        std::string error = "";
-    };
 
     struct VectorElements {
         std::vector<std::string_view> items;
@@ -527,7 +552,15 @@ private:
             case FieldType::VECTOR_FLOAT:   return parse(_tryParseVectorFloat(str));
             case FieldType::VECTOR_DOUBLE:  return parse(_tryParseVectorDouble(str));
             case FieldType::VECTOR_STRING:  return parse(_tryParseVectorString(str));
-            case FieldType::CUSTOM:         assert(false && "CUSTOM type parsing not implemented yet"); return std::nullopt;
+            case FieldType::CUSTOM: {
+                auto* cf = static_cast<const CustomFieldBase*>(field);
+                auto res = cf->parseCustom(str, this);
+                if (!res.value.has_value()) {
+                    error = res.error;
+                    return std::nullopt;
+                }
+                return Value(*res.value);
+            }
             case FieldType::VECTOR_CUSTOM:  assert(false && "VECTOR_CUSTOM type parsing not implemented yet"); return std::nullopt;
         }
         return std::nullopt;
@@ -784,5 +817,19 @@ private:
         return {StructValue(std::move(instance)), ""};
     }
 };
+
+// CustomField template implementations (defined here after Schema is complete)
+
+template<typename T>
+CustomField<T>::CustomField(std::string name, const CustomStruct<T>& schema)
+    : _name(std::move(name))
+    , _schema_name(schema.getName())
+    , _schema(schema)
+{}
+
+template<typename T>
+ParseResult<StructValue> CustomField<T>::parseCustom(std::string_view str, const Schema* s) const {
+    return s->_tryParseCustomObject(str, &_schema);
+}
 
 } // namespace cord
