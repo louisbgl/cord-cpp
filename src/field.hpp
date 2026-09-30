@@ -286,7 +286,12 @@ public:
         return choices;
     }
 
-    // Marks the field as required
+    /**
+     * @brief Mark the field as required.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
     Field<T>& required(std::source_location loc = std::source_location::current()) {
         if (_default_value.has_value())
             throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
@@ -294,7 +299,13 @@ public:
         return *this;
     }
 
-    // Sets the default value of the field
+    /**
+     * @brief Sets the default value of the field.
+     * @param val The default value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
     Field<T>& default_(T val, std::source_location loc = std::source_location::current()) {
         if (_required)
             throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
@@ -305,7 +316,9 @@ public:
     /**
      * @brief Sets the minimum allowed value (numeric) or minimum length/count (string/vector).
      * @param val The minimum value (inclusive). For numeric types, compared directly. For string/vector, specifies minimum length or element count.
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the minimum value is greater than the maximum value (if set).
      */
     Field<T>& min(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
@@ -318,7 +331,9 @@ public:
     /**
      * @brief Sets the minimum length (string) or minimum element count (vector).
      * @param count The minimum size (inclusive).
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the minimum size is greater than the maximum size (if set).
      */
     Field<T>& min(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
@@ -331,7 +346,9 @@ public:
     /**
      * @brief Sets the maximum allowed value (numeric) or maximum length/count (string/vector).
      * @param val The maximum value (inclusive). For numeric types, compared directly. For string/vector, specifies maximum length or element count.
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the maximum value is less than the minimum value (if set).
      */
     Field<T>& max(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
@@ -344,7 +361,9 @@ public:
     /**
      * @brief Sets the maximum length (string) or maximum element count (vector).
      * @param count The maximum size (inclusive).
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the maximum size is less than the minimum size (if set).
      */
     Field<T>& max(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
@@ -357,7 +376,9 @@ public:
     /**
      * @brief Sets the allowed values for the field.
      * @param values The list of allowed values.
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the list of allowed values is empty.
      *
      * @note This method performs compile-time checks to ensure that the type T is supported.
      */
@@ -414,19 +435,128 @@ public:
     bool isRequired() const override { return _required; }
 
     std::optional<std::string> checkConstraints(const Value&) const override {
-        return std::nullopt;
+        return std::nullopt; // TODO
     }
 
-    std::string describeConstraints() const override { return ""; }
+    std::string describeConstraints() const override { return ""; } // TODO
 
     std::string getSchemaName() const { return _schema_name; }
+
+    /**
+     * @brief Mark the field as required.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
+    CustomField<T>& required(std::source_location loc = std::source_location::current()) {
+        if (_default_value.has_value())
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
+        _required = true;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the default value of the field.
+     * @param val The default value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
+    CustomField<T>& default_(T val, std::source_location loc = std::source_location::current()) {
+        if (_required)
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
+        _default_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the minimum value for the field.
+     * @param val The minimum value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the minimum value is greater than the maximum value (if set).
+     */
+    CustomField<T>& min(T val, std::source_location loc = std::source_location::current()) {
+        static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        if (_max_value.has_value() && val > *_max_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
+        _min_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the minimum size for the field.
+     * @param count The minimum size.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the minimum size is greater than the maximum size (if set).
+     */
+    CustomField<T>& min(size_t count, std::source_location loc = std::source_location::current()) {
+        static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
+        if (_max_size.has_value() && count > *_max_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
+        _min_size = count;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum value for the field.
+     * @param val The maximum value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the maximum value is less than the minimum value (if set).
+     */
+    CustomField<T>& max(T val, std::source_location loc = std::source_location::current()) {
+        static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        if (_min_value.has_value() && val < *_min_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
+        _max_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum size for the field.
+     * @param count The maximum size.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the maximum size is less than the minimum size (if set).
+     */
+    CustomField<T>& max(size_t count, std::source_location loc = std::source_location::current()) {
+        static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
+        if (_min_size.has_value() && count < *_min_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
+        _max_size = count;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the list of allowed values for the field.
+     * @param values The list of allowed values.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the list of allowed values is empty.
+     */
+    CustomField<T>& oneOf(std::initializer_list<T> values, std::source_location loc = std::source_location::current()) {
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("oneOf()"));
+        if (values.size() == 0) {
+            throw CordException(loc.file_name(), loc.line(), "oneOf() with empty list: no value can satisfy these constraints");
+        }
+        _allowed_values = std::vector<T>(values);
+        return *this;
+    }
 
 private:
     std::string _name;
     std::string _schema_name;
+    CustomStruct<T> _schema;
+
     bool _required = false;
     std::optional<T> _default_value = std::nullopt;
-    CustomStruct<T> _schema;
+    std::optional<T> _min_value = std::nullopt;
+    std::optional<T> _max_value = std::nullopt;
+    std::optional<size_t> _min_size = std::nullopt;
+    std::optional<size_t> _max_size = std::nullopt;
+    std::optional<std::vector<T>> _allowed_values = std::nullopt;
 };
 
 } // namespace cord
