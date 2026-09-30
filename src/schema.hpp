@@ -659,12 +659,13 @@ private:
         return result;
     }
 
-    // Split on commas, but skip commas inside quotes or braces
+    // Split on commas, but skip commas inside quotes, braces or square brackets
     std::vector<std::string_view> _splitCommasAware(std::string_view str) const {
         std::vector<std::string_view> result;
         size_t start = 0;
         bool in_quotes = false;
         int brace_depth = 0;
+        int bracket_depth = 0;
 
         for (size_t i = 0; i < str.size(); ++i) {
             char c = str[i];
@@ -679,9 +680,11 @@ private:
             if (!in_quotes) {
                 if (c == '{') ++brace_depth;
                 if (c == '}') --brace_depth;
+                if (c == '[') ++bracket_depth;
+                if (c == ']') --bracket_depth;
             }
 
-            if (c == ',' && !in_quotes && brace_depth == 0) {
+            if (c == ',' && !in_quotes && brace_depth == 0 && bracket_depth == 0) {
                 std::string_view item = _trim(str.substr(start, i - start));
                 result.push_back(item);
                 start = i + 1;
