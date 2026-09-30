@@ -33,7 +33,7 @@ public:
             }
         }
 
-        auto field  = std::make_unique<Field<FieldType>>(name);
+        auto field  = std::make_shared<Field<FieldType>>(name);
         Field<FieldType>& field_ref = *field;
         _fields.push_back(std::move(field));
 
@@ -52,7 +52,7 @@ public:
     }
 
     std::string getName() const { return _name; }
-    const std::vector<std::unique_ptr<IField>>& getFields() const { return _fields; }
+    const std::vector<std::shared_ptr<IField>>& getFields() const { return _fields; }
 
     void setField(void* obj, const std::string& name, const Value& value,
                   std::source_location loc = std::source_location::current()) const {
@@ -77,7 +77,7 @@ public:
 
 private:
     std::string _name;
-    std::vector<std::unique_ptr<IField>> _fields;
+    std::vector<std::shared_ptr<IField>> _fields;
 
     struct Accessors {
         std::string name;
