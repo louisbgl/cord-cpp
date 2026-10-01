@@ -183,3 +183,138 @@ TEST_CASE("Custom struct: string field with comma inside quotes", "[custom_struc
     CHECK(obj.x == 1);
     CHECK(obj.name == "hello, world");
 }
+
+// ============================================================================
+// Required Fields & Defaults
+// ============================================================================
+
+TEST_CASE("Custom struct: required field missing produces error", "[custom_struct][required]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).required();
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { name = \"test\" }");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("x") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: required field present, no error", "[custom_struct][required]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).required();
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 42, name = \"test\" }");
+    result.printErrors();
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 42);
+    CHECK(obj.name == "test");
+}
+
+TEST_CASE("Custom struct: multiple required fields, all present", "[custom_struct][required]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).required();
+    simple_def.add("name", &Simple::name).required();
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 10, name = \"required\" }");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 10);
+    CHECK(obj.name == "required");
+}
+
+TEST_CASE("Custom struct: multiple required fields, one missing", "[custom_struct][required]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).required();
+    simple_def.add("name", &Simple::name).required();
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 10 }");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("name") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: optional field missing, uses struct default", "[custom_struct][defaults]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    // Only provide x, name should use struct default ("")
+    auto result = schema.parse("obj = { x = 42 }");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 42);
+    CHECK(obj.name == "");  // struct default
+}
+
+TEST_CASE("Custom struct: optional field present, overrides struct default", "[custom_struct][defaults]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 42, name = \"override\" }");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 42);
+    CHECK(obj.name == "override");
+}
+
+TEST_CASE("Custom struct: Field::default_() overrides struct member default", "[custom_struct][defaults]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).default_(999);  // Field default
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    // x absent, should use Field::default_(999) not struct default (0)
+    auto result = schema.parse("obj = { name = \"test\" }");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 999);  // Field default wins
+    CHECK(obj.name == "test");
+}
+
+TEST_CASE("Custom struct: unknown key produces error (always strict)", "[custom_struct][errors]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 1, name = \"test\", unknown = 42 }");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("unknown") != std::string::npos);
+}
