@@ -815,24 +815,37 @@ private:
     ) const {
         auto extracted = _extractObjectElements(str);
         if (!extracted.error.empty()) return {{}, extracted.error};
-
+        
         T instance = schema->create();
+        auto schema_fields = schema->getFields();
+        std::vector<std::string> parsed_fields;
         for (const auto& [key, value_str] : extracted.items) {
             IField* field = nullptr;
-            for (const auto& f : schema->getFields()) {
+            for (const auto& f : schema_fields) {
                 if (f->getName() == key) {
                     field = f.get();
                     break;
                 }
             }
             if (!field) {
-                return {{}, "unexpected key in custom object: \"" + std::string(key) +"\""};
+                return {{}, "unexpected key in " + schema->getName() + ": \"" + std::string(key) +"\""};
             }
 
             std::string error;
             auto val = _parseFieldValue(value_str, field, error);
             if (!val) return {{}, error};
             schema->setField(&instance, field->getName(), *val);
+            parsed_fields.push_back(std::string(key));
+        }
+
+        for (const auto& field : schema_fields) {
+            if (std::find(parsed_fields.begin(), parsed_fields.end(), field->getName()) != parsed_fields.end())
+                continue;
+            
+            if (field->isRequired())
+                return {{}, "missing required field '" + field->getName() + "' in object '" + schema->getName() + "'" };
+            if (field->hasDefault())
+                schema->setField(&instance, field->getName(), field->getDefault());
         }
         return {StructValue(std::move(instance)), ""};
     }
