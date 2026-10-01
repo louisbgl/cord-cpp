@@ -24,6 +24,12 @@ set(TEST_SOURCES
 add_executable(cord_tests ${TEST_SOURCES})
 target_link_libraries(cord_tests PRIVATE cord Catch2::Catch2WithMain)
 
+# Treat Catch2 headers as system headers to suppress warnings from external code
+get_target_property(CATCH2_INCLUDE_DIRS Catch2::Catch2 INTERFACE_INCLUDE_DIRECTORIES)
+if(CATCH2_INCLUDE_DIRS)
+    target_include_directories(cord_tests SYSTEM PRIVATE ${CATCH2_INCLUDE_DIRS})
+endif()
+
 if(CORD_COVERAGE)
     target_compile_options(cord_tests PRIVATE --coverage -O0 -g)
     target_link_options(cord_tests PRIVATE --coverage)
