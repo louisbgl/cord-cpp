@@ -318,3 +318,169 @@ TEST_CASE("Custom struct: unknown key produces error (always strict)", "[custom_
     REQUIRE_FALSE(errors.empty());
     CHECK(errors[0].message.find("unknown") != std::string::npos);
 }
+
+// ============================================================================
+// Constraints
+// ============================================================================
+
+TEST_CASE("Custom struct: min() enforced on int field", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).min(10);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto ok = schema.parse("obj = { x = 20, name = \"test\" }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { x = 5, name = \"test\" }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("below minimum") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: max() enforced on int field", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).max(100);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto ok = schema.parse("obj = { x = 50, name = \"test\" }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { x = 200, name = \"test\" }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("exceeds maximum") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: min() and max() combined on int field", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).min(10).max(100);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    CHECK_FALSE(schema.parse("obj = { x = 50, name = \"test\" }").hasErrors());
+    CHECK(schema.parse("obj = { x = 5, name = \"test\" }").hasErrors());
+    CHECK(schema.parse("obj = { x = 150, name = \"test\" }").hasErrors());
+}
+
+TEST_CASE("Custom struct: min() enforced on string length", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name).min(5);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto ok = schema.parse("obj = { x = 1, name = \"hello\" }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { x = 1, name = \"hi\" }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("shorter than minimum length") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: max() enforced on string length", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name).max(10);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto ok = schema.parse("obj = { x = 1, name = \"short\" }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { x = 1, name = \"very_long_name\" }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("longer than maximum length") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: min() enforced on vector count", "[custom_struct][constraints]") {
+    cord::CustomStruct<WithVectors> vec_def("WithVectors");
+    vec_def.add("ids", &WithVectors::ids).min(2);
+    vec_def.add("tags", &WithVectors::tags);
+
+    cord::Schema schema;
+    schema.add<WithVectors>("obj", vec_def);
+
+    auto ok = schema.parse("obj = { ids = [1, 2, 3], tags = [] }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { ids = [1], tags = [] }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("too few elements") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: max() enforced on vector count", "[custom_struct][constraints]") {
+    cord::CustomStruct<WithVectors> vec_def("WithVectors");
+    vec_def.add("ids", &WithVectors::ids).max(3);
+    vec_def.add("tags", &WithVectors::tags);
+
+    cord::Schema schema;
+    schema.add<WithVectors>("obj", vec_def);
+
+    auto ok = schema.parse("obj = { ids = [1, 2], tags = [] }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { ids = [1, 2, 3, 4], tags = [] }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("too many elements") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: oneOf() enforced on string field", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name).oneOf({"alice", "bob", "charlie"});
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto ok = schema.parse("obj = { x = 1, name = \"alice\" }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { x = 1, name = \"dave\" }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("not in allowed values") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: oneOf() enforced on int field", "[custom_struct][constraints]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).oneOf({1, 2, 3});
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto ok = schema.parse("obj = { x = 2, name = \"test\" }");
+    REQUIRE_FALSE(ok.hasErrors());
+
+    auto bad = schema.parse("obj = { x = 99, name = \"test\" }");
+    REQUIRE(bad.hasErrors());
+    CHECK(bad.getErrors()[0].message.find("not in allowed values") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: constraint error includes field context", "[custom_struct][constraints]") {
+    cord::CustomStruct<AllTypes> all_def("AllTypes");
+    all_def.add("count", &AllTypes::count).min(10);
+    all_def.add("flag", &AllTypes::flag);
+    all_def.add("ratio", &AllTypes::ratio);
+    all_def.add("precision", &AllTypes::precision);
+    all_def.add("text", &AllTypes::text);
+
+    cord::Schema schema;
+    schema.add<AllTypes>("config", all_def);
+
+    auto result = schema.parse("config = { count = 5, flag = true, ratio = 1.0, precision = 1.0, text = \"test\" }");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+
+    // Constraint errors propagate from field validation
+    CHECK(errors[0].message.find("below minimum") != std::string::npos);
+}
