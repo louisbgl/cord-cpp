@@ -192,6 +192,30 @@ TEST_CASE("Inline comment after vector", "[vectors]") {
     CHECK(tags[1] == "b");
 }
 
+TEST_CASE("Vector<string> with bracket characters inside strings", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("tags");
+
+    auto result = schema.parse(R"(tags = ["[{,", "normal"])");
+    REQUIRE_FALSE(result.hasErrors());
+    auto tags = result.get("tags").as<std::vector<std::string>>();
+    REQUIRE(tags.size() == 2);
+    CHECK(tags[0] == "[{,");
+    CHECK(tags[1] == "normal");
+}
+
+TEST_CASE("Vector<string> with closing bracket inside string", "[vectors]") {
+    cord::Schema schema;
+    schema.add<std::vector<std::string>>("data");
+
+    auto result = schema.parse(R"(data = ["foo]bar", "baz"])");
+    REQUIRE_FALSE(result.hasErrors());
+    auto data = result.get("data").as<std::vector<std::string>>();
+    REQUIRE(data.size() == 2);
+    CHECK(data[0] == "foo]bar");
+    CHECK(data[1] == "baz");
+}
+
 TEST_CASE("Empty string element in vector<string>", "[vectors]") {
     cord::Schema schema;
     schema.add<std::vector<std::string>>("tags");

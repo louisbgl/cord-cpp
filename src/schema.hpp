@@ -659,6 +659,23 @@ private:
         return result;
     }
 
+    // Find closing ] while respecting quotes and escapes
+    // Returns index of closing ], or npos if not found
+    size_t _findClosingBracket(std::string_view str, size_t start = 0) const {
+        bool in_quotes = false;
+        for (size_t i = start; i < str.size(); ++i) {
+            if (str[i] == '\\' && i + 1 < str.size() && in_quotes) {
+                ++i; // skip escaped char
+                continue;
+            }
+            if (str[i] == '"') in_quotes = !in_quotes;
+            if (str[i] == ']' && !in_quotes) {
+                return i;
+            }
+        }
+        return std::string_view::npos;
+    }
+
     // Split on commas, but skip commas inside quotes, braces or square brackets
     std::vector<std::string_view> _splitCommasAware(std::string_view str) const {
         std::vector<std::string_view> result;
@@ -702,14 +719,14 @@ private:
         if (str.empty() || str.front() != '[')
             return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
 
-        size_t close_bracket = str.find(']');
+        size_t close_bracket = _findClosingBracket(str, 1);
         if (close_bracket == std::string_view::npos)
             return {{}, "missing closing ']' in vector value"};
 
         std::string_view inner = _trim(str.substr(1, close_bracket - 1));
         if (inner.empty()) return {{}, ""};
 
-        return {_splitCommas(inner), ""};
+        return {_splitCommasAware(inner), ""};
     }
 
     template<typename T, typename ParseFn>
@@ -746,7 +763,7 @@ private:
         if (str.empty() || str.front() != '[')
             return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
 
-        size_t close_bracket = str.find(']');
+        size_t close_bracket = _findClosingBracket(str, 1);
         if (close_bracket == std::string_view::npos)
             return {{}, "missing closing ']' in vector value"};
 
