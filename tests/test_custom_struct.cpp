@@ -484,3 +484,193 @@ TEST_CASE("Custom struct: constraint error includes field context", "[custom_str
     // Constraint errors propagate from field validation
     CHECK(errors[0].message.find("below minimum") != std::string::npos);
 }
+
+// ============================================================================
+// Eager Validation (Schema Construction)
+// ============================================================================
+
+TEST_CASE("Custom struct: duplicate field name throws", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+
+    CHECK_THROWS_AS(
+        simple_def.add("x", &Simple::name),  // duplicate field name
+        cord::CordException
+    );
+}
+
+TEST_CASE("Custom struct: empty field name throws", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+
+    CHECK_THROWS_AS(
+        simple_def.add("", &Simple::x),
+        cord::CordException
+    );
+}
+
+TEST_CASE("Custom struct: required() then default_() throws", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+
+    CHECK_THROWS_AS(
+        simple_def.add("x", &Simple::x).required().default_(42),
+        cord::CordException
+    );
+}
+
+TEST_CASE("Custom struct: default_() then required() throws", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+
+    CHECK_THROWS_AS(
+        simple_def.add("x", &Simple::x).default_(42).required(),
+        cord::CordException
+    );
+}
+
+TEST_CASE("Custom struct: min() > max() throws for int", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+
+    CHECK_THROWS_AS(
+        simple_def.add("x", &Simple::x).min(100).max(10),
+        cord::CordException
+    );
+}
+
+TEST_CASE("Custom struct: min() > max() throws for string length", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+
+    CHECK_THROWS_AS(
+        simple_def.add("name", &Simple::name).min(10).max(5),
+        cord::CordException
+    );
+}
+
+TEST_CASE("Custom struct: oneOf() with empty list throws", "[custom_struct][eager]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+
+    CHECK_THROWS_AS(
+        simple_def.add("x", &Simple::x).oneOf({}),
+        cord::CordException
+    );
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+TEST_CASE("Custom struct: empty object with all optional fields", "[custom_struct][edge]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = {}");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 0);      // struct default
+    CHECK(obj.name == "");  // struct default
+}
+
+TEST_CASE("Custom struct: empty object with Field defaults", "[custom_struct][edge]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).default_(999);
+    simple_def.add("name", &Simple::name).default_("default");
+
+    cord::Schema schema;
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = {}");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 999);
+    CHECK(obj.name == "default");
+}
+
+// ============================================================================
+// Integration with Schema
+// ============================================================================
+
+TEST_CASE("Custom struct: case-insensitive mode on top-level schema", "[custom_struct][integration]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.setCaseInsensitive(true);
+    schema.add<Simple>("config", simple_def);
+
+    // Top-level key case-insensitive
+    auto result = schema.parse("CONFIG = { x = 10, name = \"test\" }");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("config").as<Simple>();
+    CHECK(obj.x == 10);
+    CHECK(obj.name == "test");
+}
+
+TEST_CASE("Custom struct: strict mode on top-level with valid custom struct", "[custom_struct][integration]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.setStrict(true);
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 1, name = \"test\" }");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple obj = result.get("obj").as<Simple>();
+    CHECK(obj.x == 1);
+    CHECK(obj.name == "test");
+}
+
+TEST_CASE("Custom struct: strict mode rejects unknown top-level key", "[custom_struct][integration]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.setStrict(true);
+    schema.add<Simple>("obj", simple_def);
+
+    auto result = schema.parse("obj = { x = 1, name = \"test\" }\nunknown = 42");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    CHECK(errors[0].message.find("unknown") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: multiple different custom types in same schema", "[custom_struct][integration]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::CustomStruct<AllTypes> all_def("AllTypes");
+    all_def.add("flag", &AllTypes::flag);
+    all_def.add("count", &AllTypes::count);
+    all_def.add("ratio", &AllTypes::ratio);
+    all_def.add("precision", &AllTypes::precision);
+    all_def.add("text", &AllTypes::text);
+
+    cord::Schema schema;
+    schema.add<Simple>("simple", simple_def);
+    schema.add<AllTypes>("all", all_def);
+
+    auto result = schema.parse(R"(
+simple = { x = 42, name = "test" }
+all = { flag = true, count = 10, ratio = 1.5, precision = 3.14, text = "hello" }
+)");
+    REQUIRE_FALSE(result.hasErrors());
+
+    Simple s = result.get("simple").as<Simple>();
+    CHECK(s.x == 42);
+    CHECK(s.name == "test");
+
+    AllTypes a = result.get("all").as<AllTypes>();
+    CHECK(a.flag == true);
+    CHECK(a.count == 10);
+}
