@@ -18,6 +18,7 @@ set(TEST_SOURCES
     test_get_or.cpp
     test_file_parsing.cpp
     test_describe.cpp
+    test_custom_struct.cpp
 )
 
 add_executable(cord_tests ${TEST_SOURCES})
