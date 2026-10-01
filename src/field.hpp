@@ -434,8 +434,16 @@ public:
     Value getDefault() const override { return Value(StructValue(*_default_value)); }
     bool isRequired() const override { return _required; }
 
-    std::optional<std::string> checkConstraints(const Value&) const override {
-        return std::nullopt; // TODO
+    std::optional<std::string> checkConstraints(const Value& value) const override {
+        // TODO check constraints on the custom struct itself
+        // Check children fields constraints
+        T instance = value.as<T>();
+        for (const auto& field : _schema.getFields()) {
+            Value field_value = _schema.getField(&instance, field->getName());
+            auto err = field->checkConstraints(field_value);
+            if (err) return err;
+        }
+        return std::nullopt;
     }
 
     std::string describeConstraints() const override { return ""; } // TODO
