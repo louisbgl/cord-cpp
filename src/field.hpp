@@ -412,22 +412,40 @@ template<typename T> class CustomStruct;
 class CustomFieldBase : public IField {
 public:
     virtual ParseResult<StructValue> parseCustom(std::string_view str, const Schema* s) const = 0;
+    virtual ParseResult<std::vector<StructValue>> parseCustomVector(std::string_view str, const Schema* s) const = 0;
 };
+
+// Helper to extract element type: vector<T> -> T, T -> T
+template<typename T>
+struct ExtractElem { using type = T; };
+
+template<typename T>
+struct ExtractElem<std::vector<T>> { using type = T; };
+
+template<typename T>
+using ExtractElem_t = typename ExtractElem<T>::type;
 
 /**
  * @brief Field representing a custom struct type
  */
 template<typename T>
 class CustomField : public CustomFieldBase {
+private:
+    // Extract element type: vector<Sound> -> Sound, Sound -> Sound
+    using ElemType = ExtractElem_t<T>;
+
 public:
     // Defined in schema.hpp after Schema is complete
-    CustomField(std::string name, const CustomStruct<T>& schema);
+    CustomField(std::string name, const CustomStruct<ElemType>& schema);
 
     // Defined in schema.hpp after Schema is complete
     ParseResult<StructValue> parseCustom(std::string_view str, const Schema* s) const override;
 
+    // Defined in schema.hpp after Schema is complete
+    ParseResult<std::vector<StructValue>> parseCustomVector(std::string_view str, const Schema* s) const override;
+
     std::string getName() const override { return _name; }
-    FieldType getType() const override { return FieldType::CUSTOM; }
+    FieldType getType() const override { return typeOf<T>(); }
     std::string getTypeName() const override { return _schema_name; }
 
     bool hasDefault() const override { return _default_value.has_value(); }
@@ -435,13 +453,22 @@ public:
     bool isRequired() const override { return _required; }
 
     std::optional<std::string> checkConstraints(const Value& value) const override {
-        // TODO check constraints on the custom struct itself
-        // Check children fields constraints
-        T instance = value.as<T>();
-        for (const auto& field : _schema.getFields()) {
-            Value field_value = _schema.getField(&instance, field->getName());
-            auto err = field->checkConstraints(field_value);
-            if (err) return err;
+        if constexpr (is_custom_struct_v<T>) {
+            T instance = value.as<T>();
+            for (const auto& field : _schema.getFields()) {
+                Value field_value = _schema.getField(&instance, field->getName());
+                auto err = field->checkConstraints(field_value);
+                if (err) return err;
+            }
+        } else if constexpr (is_vector_of_custom_struct_v<T>) {
+            T vec = value.as<T>();
+            for (size_t i = 0; i < vec.size(); ++i) {
+                for (const auto& field : _schema.getFields()) {
+                    Value field_value = _schema.getField(&vec[i], field->getName());
+                    auto err = field->checkConstraints(field_value);
+                    if (err) return "element at index " + std::to_string(i) + ": " + *err;
+                }
+            }
         }
         return std::nullopt;
     }
@@ -556,7 +583,7 @@ public:
 private:
     std::string _name;
     std::string _schema_name;
-    CustomStruct<T> _schema;
+    CustomStruct<ElemType> _schema;
 
     bool _required = false;
     std::optional<T> _default_value = std::nullopt;
