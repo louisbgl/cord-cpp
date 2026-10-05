@@ -378,6 +378,26 @@ public:
         return ptr;
     }
 
+    template<typename T>
+        requires is_vector_of_custom_struct_v<T>
+    CustomField<T>& add(std::string name, CustomStruct<typename T::value_type>& custom_struct,
+                  std::source_location loc = std::source_location::current()) {
+        static_assert(is_vector_of_custom_struct_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<std::vector<T>>(CustomStruct<T>)"));
+        if (name.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
+        }
+        for (const auto& f : _fields) {
+            if (f->getName() == name) {
+                throw CordException(loc.file_name(), loc.line(), "Schema cannot have duplicate field names: " + name);
+            }
+        }
+
+        auto field = std::make_unique<CustomField<T>>(name, custom_struct);
+        CustomField<T>& ptr = *field;
+        _fields.push_back(std::move(field));
+        return ptr;
+    }
+
     /**
      * @brief Sets the schema to strict mode
      * @param strict Whether to enable strict mode
@@ -561,22 +581,17 @@ private:
                 }
                 return Value(*res.value);
             }
-            case FieldType::VECTOR_CUSTOM:  assert(false && "VECTOR_CUSTOM type parsing not implemented yet"); return std::nullopt;
+            case FieldType::VECTOR_CUSTOM: {
+                auto* cf = static_cast<const CustomFieldBase*>(field);
+                auto res = cf->parseCustomVector(str, this);
+                if (!res.value.has_value()) {
+                    error = res.error;
+                    return std::nullopt;
+                }
+                return Value(*res.value);
+            }
         }
         return std::nullopt;
-    }
-
-    template<typename T>
-    bool _tryParseAndStore(Result& result, IField* field, std::string_view value_str,
-                           std::string& parse_error,
-                           ParseResult<T> (Schema::*parse_fn)(std::string_view) const) const {
-        auto res = (this->*parse_fn)(value_str);
-        if (res.value.has_value()) {
-            result._insert_or_modify_value(field->getName(), Value(*res.value));
-            return true;
-        }
-        parse_error = res.error;
-        return false;
     }
 
     ParseResult<int> _tryParseInt(const std::string_view str) const {
@@ -854,7 +869,7 @@ private:
 // CustomField template implementations (defined here after Schema is complete)
 
 template<typename T>
-CustomField<T>::CustomField(std::string name, const CustomStruct<T>& schema)
+CustomField<T>::CustomField(std::string name, const CustomStruct<ElemType>& schema)
     : _name(std::move(name))
     , _schema_name(schema.getName())
     , _schema(schema)
@@ -863,6 +878,21 @@ CustomField<T>::CustomField(std::string name, const CustomStruct<T>& schema)
 template<typename T>
 ParseResult<StructValue> CustomField<T>::parseCustom(std::string_view str, const Schema* s) const {
     return s->_tryParseCustomObject(str, &_schema);
+}
+
+template<typename T>
+ParseResult<std::vector<StructValue>> CustomField<T>::parseCustomVector(std::string_view str, const Schema* s) const {
+    auto extracted = s->_extractVectorElements(str);
+    if (!extracted.error.empty()) return {{}, extracted.error};
+
+    std::vector<StructValue> result;
+    for (size_t i = 0; i < extracted.items.size(); ++i) {
+        auto elem = s->_tryParseCustomObject(extracted.items[i], &_schema);
+        if (!elem.value.has_value())
+            return {{}, "element at index " + std::to_string(i) + ": " + elem.error};
+        result.push_back(*elem.value);
+    }
+    return {result, ""};
 }
 
 } // namespace cord
