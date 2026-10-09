@@ -54,7 +54,7 @@ curl -O https://raw.githubusercontent.com/louisbgl/cord-cpp/main/cord.hpp
 include(FetchContent)
 FetchContent_Declare(cord
   GIT_REPOSITORY https://github.com/louisbgl/cord-cpp.git
-  GIT_TAG main)
+  GIT_TAG v1)  # Or any other stable release
 FetchContent_MakeAvailable(cord)
 
 target_link_libraries(your_app PRIVATE cord)
@@ -267,6 +267,39 @@ result.writeFile("output.conf");
 auto result = schema.parseFile("config.conf");
 result.set("high_score", 9999).writeFile("config.conf");
 ```
+
+## Ongoing Work
+
+### Custom Struct Support (In Progress)
+
+Cord now supports parsing user-defined structs in addition to primitives. You can map C++ POD types directly to config file structures.
+
+```cpp
+struct Config {
+    std::string host = "";
+    int port = 0;
+};
+CORD_REGISTER_STRUCT(Config);
+
+cord::CustomStruct<Config> config_def("Config");
+config_def.add("host", &Config::host).required();
+config_def.add("port", &Config::port).min(1024).max(65535);
+
+cord::Schema schema;
+schema.add<Config>("server", config_def);
+schema.add<std::vector<Config>>("mirrors", config_def);
+
+// Parse: server = {host="localhost", port=8080}
+auto result = schema.parseFile("app.conf");
+Config server = result.get("server").as<Config>();
+```
+
+See `examples/custom_types/` for full example.
+
+**Limitations:**
+- Custom structs must be default-constructible
+- Fields must be primitives (bool, int, float, double, string, vector<T>)
+- Nested custom structs not yet supported
 
 ## License
 
