@@ -27,3 +27,4 @@ jobs:
           cmake --build build --target run_config_markers
           cmake --build build --target run_constraints
           cmake --build build --target run_writing
+          cmake --build build --target run_custom_types

@@ -83,3 +83,53 @@ tracks = [
 - `describe()` formatting options (compact vs expanded for custom structs)
 - Source maps for custom struct field errors (show exact position in config)
 - Custom validators on struct fields
+
+---
+
+# CI Improvements
+
+## Current State
+- Ubuntu only (default GCC)
+- Single compiler, single platform
+- Examples workflow missing `run_custom_types`
+
+## Needed
+
+### 1. Compiler Matrix (Linux)
+**Priority: High**
+
+Test multiple compilers to catch platform-specific issues:
+- GCC: 11, 12, 13
+- Clang: 15, 16, 17
+
+Add matrix strategy to `.github/workflows/test.yml`:
+```yaml
+strategy:
+  matrix:
+    compiler:
+      - { cc: gcc-11, cxx: g++-11 }
+      - { cc: gcc-12, cxx: g++-12 }
+      - { cc: gcc-13, cxx: g++-13 }
+      - { cc: clang-15, cxx: clang++-15 }
+      - { cc: clang-16, cxx: clang++-16 }
+      - { cc: clang-17, cxx: clang++-17 }
+```
+
+### 2. macOS Support
+**Priority: Medium**
+
+Add macOS job with AppleClang:
+- `runs-on: macos-latest`
+- Tests M1/M2 compatibility
+- Different standard library implementation
+
+### 3. Windows MSVC
+**Priority: Low (Defer)**
+
+Add Windows job:
+- `runs-on: windows-latest`
+- MSVC C++20 support varies by version
+- May need code adjustments for compatibility
+- Can be disabled initially until Windows compatibility verified
+
+**Note:** Mark job as `continue-on-error: true` until full Windows support confirmed.
