@@ -674,3 +674,277 @@ all = { flag = true, count = 10, ratio = 1.5, precision = 3.14, text = "hello" }
     CHECK(a.flag == true);
     CHECK(a.count == 10);
 }
+
+// ============================================================================
+// Vector of Custom Structs
+// ============================================================================
+
+TEST_CASE("Vector custom struct: empty vector", "[vector_custom][basic]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = []");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto items = result.get("items").as<std::vector<Simple>>();
+    CHECK(items.empty());
+}
+
+TEST_CASE("Vector custom struct: single element", "[vector_custom][basic]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 10, name = \"first\"}]");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto items = result.get("items").as<std::vector<Simple>>();
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].x == 10);
+    CHECK(items[0].name == "first");
+}
+
+TEST_CASE("Vector custom struct: multiple elements", "[vector_custom][basic]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 1, name = \"a\"}, {x = 2, name = \"b\"}, {x = 3, name = \"c\"}]");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto items = result.get("items").as<std::vector<Simple>>();
+    REQUIRE(items.size() == 3);
+    CHECK(items[0].x == 1);
+    CHECK(items[0].name == "a");
+    CHECK(items[1].x == 2);
+    CHECK(items[1].name == "b");
+    CHECK(items[2].x == 3);
+    CHECK(items[2].name == "c");
+}
+
+TEST_CASE("Vector custom struct: different struct types in schema", "[vector_custom][basic]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::CustomStruct<AllTypes> all_def("AllTypes");
+    all_def.add("flag", &AllTypes::flag);
+    all_def.add("count", &AllTypes::count);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("simples", simple_def);
+    schema.add<std::vector<AllTypes>>("configs", all_def);
+
+    auto result = schema.parse(R"(
+simples = [{x = 1, name = "a"}, {x = 2, name = "b"}]
+configs = [{flag = true, count = 10}]
+)");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto simples = result.get("simples").as<std::vector<Simple>>();
+    REQUIRE(simples.size() == 2);
+    CHECK(simples[0].x == 1);
+
+    auto configs = result.get("configs").as<std::vector<AllTypes>>();
+    REQUIRE(configs.size() == 1);
+    CHECK(configs[0].flag == true);
+}
+
+TEST_CASE("Vector custom struct: element missing required field", "[vector_custom][validation]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).required();
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{name = \"missing x\"}]");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].message.find("required") != std::string::npos);
+    CHECK(errors[0].message.find("x") != std::string::npos);
+}
+
+TEST_CASE("Vector custom struct: element has default field", "[vector_custom][validation]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).default_(99);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{name = \"only name\"}]");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto items = result.get("items").as<std::vector<Simple>>();
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].x == 99);
+    CHECK(items[0].name == "only name");
+}
+
+TEST_CASE("Vector custom struct: element field type mismatch", "[vector_custom][validation]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = \"not an int\", name = \"test\"}]");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    CHECK(errors.size() > 0);
+}
+
+TEST_CASE("Vector custom struct: element field constraint violation", "[vector_custom][validation]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).min(10);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 5, name = \"too small\"}, {x = 15, name = \"ok\"}]");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].message.find("index") != std::string::npos);
+    CHECK(errors[0].message.find("0") != std::string::npos);
+}
+
+TEST_CASE("Vector custom struct: vector field required", "[vector_custom][metadata]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def).required();
+
+    auto result = schema.parse("");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].message.find("required") != std::string::npos);
+    CHECK(errors[0].message.find("items") != std::string::npos);
+}
+
+TEST_CASE("Vector custom struct: vector field optional", "[vector_custom][metadata]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("");
+    REQUIRE_FALSE(result.hasErrors());
+    CHECK_FALSE(result.contains("items"));
+}
+
+TEST_CASE("Vector custom struct: field type is VECTOR_CUSTOM", "[vector_custom][type_system]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    auto& field = schema.add<std::vector<Simple>>("items", simple_def);
+
+    CHECK(field.getType() == cord::FieldType::VECTOR_CUSTOM);
+}
+
+TEST_CASE("Vector custom struct: error includes element index", "[vector_custom][errors]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x).max(100);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 50, name = \"ok\"}, {x = 150, name = \"too big\"}]");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].message.find("element at index 1") != std::string::npos);
+}
+
+TEST_CASE("Vector custom struct: parse malformed element", "[vector_custom][errors]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 1, name = }]");
+    REQUIRE(result.hasErrors());
+}
+
+TEST_CASE("Vector custom struct: missing closing bracket", "[vector_custom][errors]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 1, name = \"a\"}");
+    REQUIRE(result.hasErrors());
+}
+
+TEST_CASE("Vector custom struct: all elements identical", "[vector_custom][edge]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<Simple>>("items", simple_def);
+
+    auto result = schema.parse("items = [{x = 42, name = \"same\"}, {x = 42, name = \"same\"}, {x = 42, name = \"same\"}]");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto items = result.get("items").as<std::vector<Simple>>();
+    REQUIRE(items.size() == 3);
+    for (const auto& item : items) {
+        CHECK(item.x == 42);
+        CHECK(item.name == "same");
+    }
+}
+
+TEST_CASE("Vector custom struct: mixed with primitive vectors", "[vector_custom][interaction]") {
+    cord::CustomStruct<Simple> simple_def("Simple");
+    simple_def.add("x", &Simple::x);
+    simple_def.add("name", &Simple::name);
+
+    cord::Schema schema;
+    schema.add<std::vector<int>>("numbers");
+    schema.add<std::vector<Simple>>("objects", simple_def);
+
+    auto result = schema.parse(R"(
+numbers = [1, 2, 3]
+objects = [{x = 10, name = "test"}]
+)");
+    REQUIRE_FALSE(result.hasErrors());
+
+    auto numbers = result.get("numbers").as<std::vector<int>>();
+    CHECK(numbers.size() == 3);
+
+    auto objects = result.get("objects").as<std::vector<Simple>>();
+    CHECK(objects.size() == 1);
+}
+
