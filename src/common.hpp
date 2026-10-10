@@ -1,10 +1,13 @@
 #pragma once
 
+#include "struct_traits.hpp"
+#include "struct_value.hpp"
+
+#include <cassert>
 #include <cctype>
 #include <string>
 #include <vector>
 #include <format>
-#include <optional>
 #include <type_traits>
 
 namespace cord {
@@ -14,12 +17,6 @@ struct ParseResult {
     std::optional<T> value;
     std::string error = "";
 };
-
-struct VectorElements {
-    std::vector<std::string_view> items;
-    std::string error;
-};
-
 
 // Error message macro for static_assert failures on unsupported types
 #define CORD_UNSUPPORTED_TYPE(context) \
@@ -96,7 +93,9 @@ constexpr bool is_supported_value_type_v =
     std::is_same_v<T, std::vector<int>> ||
     std::is_same_v<T, std::vector<float>> ||
     std::is_same_v<T, std::vector<double>> ||
-    std::is_same_v<T, std::vector<std::string>>;
+    std::is_same_v<T, std::vector<std::string>> ||
+    is_custom_struct_v<T> ||
+    is_vector_of_custom_struct_v<T>;
 
 // Converts any supported cord type to its string representation
 template<typename T>
@@ -122,6 +121,8 @@ std::string valueToString(const T& val) {
         return std::to_string(val);
     else if constexpr (is_supported_numeric_type_v<T>) // matches float and double
         return std::format("{:g}", val);
+    else if constexpr (std::is_same_v<T, StructValue>)
+        assert(false && "valueToString<StructValue>(): not implemented yet");
     else if constexpr (std::is_same_v<typename T::value_type, bool>) {
         // vector<bool> is special: operator[] returns a proxy object, not a bool&,
         // so we can't pass elements directly to a recursive valueToString<bool> call
@@ -133,7 +134,7 @@ std::string valueToString(const T& val) {
         return s + "]";
     }
     else {
-        // vector<int/float/double/string>
+        // vector form of supported types, recurse
         using Elem = typename T::value_type;
         std::string s = "[";
         for (size_t i = 0; i < val.size(); ++i) {
@@ -157,7 +158,9 @@ enum class FieldType {
     VECTOR_INT,
     VECTOR_FLOAT,
     VECTOR_DOUBLE,
-    VECTOR_STRING
+    VECTOR_STRING,
+    CUSTOM, // a user defined custom POD struct type
+    VECTOR_CUSTOM,
 };
 
 // Lowercases a string_view into a new std::string
@@ -180,6 +183,8 @@ inline std::string fieldTypeName(FieldType type) {
         case FieldType::VECTOR_FLOAT:  return "vector<float>";
         case FieldType::VECTOR_DOUBLE: return "vector<double>";
         case FieldType::VECTOR_STRING: return "vector<string>";
+        case FieldType::CUSTOM:        return "custom struct";
+        case FieldType::VECTOR_CUSTOM: return "vector<custom struct>";
     }
     return "unknown"; // unreachable
 }

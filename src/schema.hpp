@@ -19,6 +19,7 @@
 #include "field.hpp"
 #include "errors.hpp"
 #include "exception.hpp"
+#include "custom_struct.hpp"
 
 namespace cord {
 
@@ -164,6 +165,8 @@ private:
  * @note Compile-time checks are performed to ensure that only supported types are used.
  */
 class Schema {
+    template<typename T> friend class CustomField;  // needs access to _tryParseCustomObject
+
 public:
     /**
      * @brief Parses the input string according to the schema.
@@ -225,36 +228,12 @@ public:
                 continue;
             }
 
-            bool parsed = false;
-            std::string parse_error;
-            switch (field->getType()) {
-                case FieldType::BOOL:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseBool); break;
-                case FieldType::STRING:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseString); break;
-                case FieldType::INT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseInt); break;
-                case FieldType::FLOAT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseFloat); break;
-                case FieldType::DOUBLE:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseDouble); break;
-                case FieldType::VECTOR_BOOL:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorBool); break;
-                case FieldType::VECTOR_INT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorInt); break;
-                case FieldType::VECTOR_FLOAT:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorFloat); break;
-                case FieldType::VECTOR_DOUBLE:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorDouble); break;
-                case FieldType::VECTOR_STRING:
-                    parsed = _tryParseAndStore(result, field, value_str, parse_error, &Schema::_tryParseVectorString); break;
-            }
-
-            if (!parsed) {
-                std::string msg = "Invalid value for '" + std::string(key) + "'";
-                if (!parse_error.empty()) msg += ": " + parse_error;
-                result._ec.addError(msg, std::nullopt, static_cast<int>(i + 1));
+            std::string error;
+            auto val = _parseFieldValue(value_str, field, error);
+            if (!val) {
+                result._ec.addError("Invalid value for '" + std::string(key) + "': " + error, std::nullopt, static_cast<int>(i + 1));
             } else {
+                result._insert_or_modify_value(field->getName(), *val);
                 _checkFieldConstraints(result, field, i + 1);
             }
         }
@@ -286,12 +265,12 @@ public:
         size_t max_type_len = 0;
         size_t max_name_len = 0;
         for (const auto& f : _fields) {
-            max_type_len = std::max(max_type_len, fieldTypeName(f->getType()).size());
+            max_type_len = std::max(max_type_len, f->getTypeName().size());
             max_name_len = std::max(max_name_len, f->getName().size());
         }
 
         auto print_field = [&](const std::unique_ptr<IField>& f) {
-            std::string type = fieldTypeName(f->getType());
+            std::string type = f->getTypeName();
             std::string name = f->getName();
             std::cout << "  " << type << std::string(max_type_len - type.size() + 2, ' ');
             std::cout << name;
@@ -371,6 +350,55 @@ public:
     }
 
     /**
+     * @brief Adds a custom field to the schema
+     * @tparam T The type of the custom field
+     * @param name The name of the field
+     * @param custom_struct The custom struct to use for the field
+     * @param loc The source location for error reporting (default: current location)
+     * @return A reference to the added custom field
+     *
+     * @note Compile-time checks are performed to ensure that only supported types are used.
+     */
+    template<typename T>
+    CustomField<T>& add(std::string name, CustomStruct<T>& custom_struct,
+                  std::source_location loc = std::source_location::current()) {
+        static_assert(is_custom_struct_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<T>(CustomStruct<T>)"));
+        if (name.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
+        }
+        for (const auto& f : _fields) {
+            if (f->getName() == name) {
+                throw CordException(loc.file_name(), loc.line(), "Schema cannot have duplicate field names: " + name);
+            }
+        }
+
+        auto field = std::make_unique<CustomField<T>>(name, custom_struct);
+        CustomField<T>& ptr = *field;
+        _fields.push_back(std::move(field));
+        return ptr;
+    }
+
+    template<typename T>
+        requires is_vector_of_custom_struct_v<T>
+    CustomField<T>& add(std::string name, CustomStruct<typename T::value_type>& custom_struct,
+                  std::source_location loc = std::source_location::current()) {
+        static_assert(is_vector_of_custom_struct_v<T>, CORD_UNSUPPORTED_TYPE("schema.add<std::vector<T>>(CustomStruct<T>)"));
+        if (name.empty()) {
+            throw CordException(loc.file_name(), loc.line(), "Field name cannot be empty");
+        }
+        for (const auto& f : _fields) {
+            if (f->getName() == name) {
+                throw CordException(loc.file_name(), loc.line(), "Schema cannot have duplicate field names: " + name);
+            }
+        }
+
+        auto field = std::make_unique<CustomField<T>>(name, custom_struct);
+        CustomField<T>& ptr = *field;
+        _fields.push_back(std::move(field));
+        return ptr;
+    }
+
+    /**
      * @brief Sets the schema to strict mode
      * @param strict Whether to enable strict mode
      *
@@ -440,6 +468,16 @@ private:
     std::string _delimiter = "=";
     std::string _comment_marker = "#";
     std::string _filepath;
+
+    struct VectorElements {
+        std::vector<std::string_view> items;
+        std::string error;
+    };
+
+    struct ObjectElements {
+        std::vector<std::pair<std::string_view, std::string_view>> items;
+        std::string error;
+    };
 
     void _ensureDelimiterOkay(const std::string& delimiter, std::source_location loc) const {
         if (delimiter.empty()) {
@@ -513,17 +551,47 @@ private:
         return s;
     }
 
-    template<typename T>
-    bool _tryParseAndStore(Result& result, IField* field, std::string_view value_str,
-                           std::string& parse_error,
-                           ParseResult<T> (Schema::*parse_fn)(std::string_view) const) const {
-        auto res = (this->*parse_fn)(value_str);
-        if (res.value.has_value()) {
-            result._insert_or_modify_value(field->getName(), Value(*res.value));
-            return true;
+    std::optional<Value> _parseFieldValue(std::string_view str, const IField* field, std::string& error) const {
+        // lambda for convenience
+        auto parse = [&error]<typename T>(const ParseResult<T>& res) -> std::optional<Value> {
+            if (!res.value.has_value()) {
+                error = res.error;
+                return std::nullopt;
+            }
+            return Value(*res.value);
+        };
+
+        switch(field->getType()) {
+            case FieldType::BOOL:           return parse(_tryParseBool(str));
+            case FieldType::STRING:         return parse(_tryParseString(str));
+            case FieldType::INT:            return parse(_tryParseInt(str));
+            case FieldType::FLOAT:          return parse(_tryParseFloat(str));
+            case FieldType::DOUBLE:         return parse(_tryParseDouble(str));
+            case FieldType::VECTOR_BOOL:    return parse(_tryParseVectorBool(str));
+            case FieldType::VECTOR_INT:     return parse(_tryParseVectorInt(str));
+            case FieldType::VECTOR_FLOAT:   return parse(_tryParseVectorFloat(str));
+            case FieldType::VECTOR_DOUBLE:  return parse(_tryParseVectorDouble(str));
+            case FieldType::VECTOR_STRING:  return parse(_tryParseVectorString(str));
+            case FieldType::CUSTOM: {
+                auto* cf = static_cast<const CustomFieldBase*>(field);
+                auto res = cf->parseCustom(str, this);
+                if (!res.value.has_value()) {
+                    error = res.error;
+                    return std::nullopt;
+                }
+                return Value(*res.value);
+            }
+            case FieldType::VECTOR_CUSTOM: {
+                auto* cf = static_cast<const CustomFieldBase*>(field);
+                auto res = cf->parseCustomVector(str, this);
+                if (!res.value.has_value()) {
+                    error = res.error;
+                    return std::nullopt;
+                }
+                return Value(*res.value);
+            }
         }
-        parse_error = res.error;
-        return false;
+        return std::nullopt;
     }
 
     ParseResult<int> _tryParseInt(const std::string_view str) const {
@@ -606,18 +674,74 @@ private:
         return result;
     }
 
+    // Find closing ] while respecting quotes and escapes
+    // Returns index of closing ], or npos if not found
+    size_t _findClosingBracket(std::string_view str, size_t start = 0) const {
+        bool in_quotes = false;
+        for (size_t i = start; i < str.size(); ++i) {
+            if (str[i] == '\\' && i + 1 < str.size() && in_quotes) {
+                ++i; // skip escaped char
+                continue;
+            }
+            if (str[i] == '"') in_quotes = !in_quotes;
+            if (str[i] == ']' && !in_quotes) {
+                return i;
+            }
+        }
+        return std::string_view::npos;
+    }
+
+    // Split on commas, but skip commas inside quotes, braces or square brackets
+    std::vector<std::string_view> _splitCommasAware(std::string_view str) const {
+        std::vector<std::string_view> result;
+        size_t start = 0;
+        bool in_quotes = false;
+        int brace_depth = 0;
+        int bracket_depth = 0;
+
+        for (size_t i = 0; i < str.size(); ++i) {
+            char c = str[i];
+
+            // Handle escape sequences
+            if (c == '\\' && i + 1 < str.size() && in_quotes) {
+                ++i;
+                continue;
+            }
+
+            if (c == '"') in_quotes = !in_quotes;
+            if (!in_quotes) {
+                if (c == '{') ++brace_depth;
+                if (c == '}') --brace_depth;
+                if (c == '[') ++bracket_depth;
+                if (c == ']') --bracket_depth;
+            }
+
+            if (c == ',' && !in_quotes && brace_depth == 0 && bracket_depth == 0) {
+                std::string_view item = _trim(str.substr(start, i - start));
+                result.push_back(item);
+                start = i + 1;
+            }
+        }
+
+        if (start < str.size()) {
+            std::string_view item = _trim(str.substr(start));
+            result.push_back(item);
+        }
+        return result;
+    }
+
     VectorElements _extractVectorElements(std::string_view str) const {
         if (str.empty() || str.front() != '[')
             return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
 
-        size_t close_bracket = str.find(']');
+        size_t close_bracket = _findClosingBracket(str, 1);
         if (close_bracket == std::string_view::npos)
             return {{}, "missing closing ']' in vector value"};
 
         std::string_view inner = _trim(str.substr(1, close_bracket - 1));
         if (inner.empty()) return {{}, ""};
 
-        return {_splitCommas(inner), ""};
+        return {_splitCommasAware(inner), ""};
     }
 
     template<typename T, typename ParseFn>
@@ -653,41 +777,122 @@ private:
     ParseResult<std::vector<std::string>> _tryParseVectorString(std::string_view str) const {
         if (str.empty() || str.front() != '[')
             return {{}, "expected '[' to open vector, got: \"" + std::string(str) + "\""};
-        if (str.find(']') == std::string_view::npos)
+
+        size_t close_bracket = _findClosingBracket(str, 1);
+        if (close_bracket == std::string_view::npos)
             return {{}, "missing closing ']' in vector value"};
 
-        // Can't use _splitCommas here: commas inside quoted strings ("a,b") would be split wrongly.
-        // Scan char-by-char, collect quoted tokens, skip commas between them.
+        std::string_view inner = _trim(str.substr(1, close_bracket - 1));
+        if (inner.empty()) return {std::vector<std::string>{}};
+
+        // Use quote-aware splitting
+        auto elements = _splitCommasAware(inner);
+
         std::vector<std::string> result;
-        size_t i = 1; // skip '['
-        while (i < str.size() && str[i] != ']') {
-            // skip whitespace and commas between elements
-            while (i < str.size() && str[i] != ']' && (std::isspace(str[i]) || str[i] == ',')) ++i;
-            if (i >= str.size() || str[i] == ']') break;
-
-            if (str[i] != '"')
-                return {{}, "element at index " + std::to_string(result.size()) + ": string values must be quoted with \""};
-
-            // find the closing quote, respecting \" escapes
-            size_t token_start = i;
-            ++i; // skip opening '"'
-            while (i < str.size() && str[i] != ']') {
-                if (str[i] == '\\' && i + 1 < str.size()) { ++i; ++i; continue; }
-                if (str[i] == '"') break;
-                ++i;
-            }
-            if (i >= str.size() || str[i] != '"')
-                return {{}, "element at index " + std::to_string(result.size()) + ": unterminated string"};
-            ++i; // skip closing '"'
-
-            std::string_view token = str.substr(token_start, i - token_start);
-            auto parsed = _tryParseString(token);
+        for (size_t i = 0; i < elements.size(); ++i) {
+            auto parsed = _tryParseString(elements[i]);
             if (!parsed.value.has_value())
-                return {{}, "element at index " + std::to_string(result.size()) + ": " + parsed.error};
+                return {{}, "element at index " + std::to_string(i) + ": " + parsed.error};
             result.push_back(std::move(*parsed.value));
         }
         return {result};
     }
+
+    ObjectElements _extractObjectElements(std::string_view str) const {
+        if (str.empty() || str.front() != '{')
+            return {{}, "expected '{' to open object, got: \"" + std::string(str) + "\""};
+
+        size_t close_brace = str.find('}');
+        if (close_brace == std::string_view::npos)
+            return {{}, "missing closing '}' in object value"};
+
+        std::string_view inner = _trim(str.substr(1, close_brace - 1));
+        if (inner.empty()) return {{}, ""}; // empty object valid at this point
+
+        auto pairs = _splitCommasAware(inner);
+        std::vector<std::pair<std::string_view, std::string_view>> result;
+        for (auto& segment : pairs) {
+            size_t delim_pos = segment.find(_delimiter);
+            if (delim_pos == std::string_view::npos)
+                return {{}, "missing delimiter (" + _delimiter + ") in field: \"" + std::string(segment) + "\""};
+
+            std::string_view key = _trim(segment.substr(0, delim_pos));
+            std::string_view value = _trim(segment.substr(delim_pos + _delimiter.length()));
+            result.emplace_back(key, value);
+        }
+        return {result, ""};
+    }
+
+    template<typename T>
+    ParseResult<StructValue> _tryParseCustomObject(
+        std::string_view str,
+        const CustomStruct<T>* schema
+    ) const {
+        auto extracted = _extractObjectElements(str);
+        if (!extracted.error.empty()) return {{}, extracted.error};
+        
+        T instance = schema->create();
+        auto schema_fields = schema->getFields();
+        std::vector<std::string> parsed_fields;
+        for (const auto& [key, value_str] : extracted.items) {
+            IField* field = nullptr;
+            for (const auto& f : schema_fields) {
+                if (f->getName() == key) {
+                    field = f.get();
+                    break;
+                }
+            }
+            if (!field) {
+                return {{}, "unexpected key in " + schema->getName() + ": \"" + std::string(key) +"\""};
+            }
+
+            std::string error;
+            auto val = _parseFieldValue(value_str, field, error);
+            if (!val) return {{}, error};
+            schema->setField(&instance, field->getName(), *val);
+            parsed_fields.push_back(std::string(key));
+        }
+
+        for (const auto& field : schema_fields) {
+            if (std::find(parsed_fields.begin(), parsed_fields.end(), field->getName()) != parsed_fields.end())
+                continue;
+            
+            if (field->isRequired())
+                return {{}, "missing required field '" + field->getName() + "' in object '" + schema->getName() + "'" };
+            if (field->hasDefault())
+                schema->setField(&instance, field->getName(), field->getDefault());
+        }
+        return {StructValue(std::move(instance)), ""};
+    }
 };
+
+// CustomField template implementations (defined here after Schema is complete)
+
+template<typename T>
+CustomField<T>::CustomField(std::string name, const CustomStruct<ElemType>& schema)
+    : _name(std::move(name))
+    , _schema_name(schema.getName())
+    , _schema(schema)
+{}
+
+template<typename T>
+ParseResult<StructValue> CustomField<T>::parseCustom(std::string_view str, const Schema* s) const {
+    return s->_tryParseCustomObject(str, &_schema);
+}
+
+template<typename T>
+ParseResult<std::vector<StructValue>> CustomField<T>::parseCustomVector(std::string_view str, const Schema* s) const {
+    auto extracted = s->_extractVectorElements(str);
+    if (!extracted.error.empty()) return {{}, extracted.error};
+
+    std::vector<StructValue> result;
+    for (size_t i = 0; i < extracted.items.size(); ++i) {
+        auto elem = s->_tryParseCustomObject(extracted.items[i], &_schema);
+        if (!elem.value.has_value())
+            return {{}, "element at index " + std::to_string(i) + ": " + elem.error};
+        result.push_back(*elem.value);
+    }
+    return {result, ""};
+}
 
 } // namespace cord

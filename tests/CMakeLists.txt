@@ -18,10 +18,17 @@ set(TEST_SOURCES
     test_get_or.cpp
     test_file_parsing.cpp
     test_describe.cpp
+    test_custom_struct.cpp
 )
 
 add_executable(cord_tests ${TEST_SOURCES})
 target_link_libraries(cord_tests PRIVATE cord Catch2::Catch2WithMain)
+
+# Treat Catch2 headers as system headers to suppress warnings from external code
+get_target_property(CATCH2_INCLUDE_DIRS Catch2::Catch2 INTERFACE_INCLUDE_DIRECTORIES)
+if(CATCH2_INCLUDE_DIRS)
+    target_include_directories(cord_tests SYSTEM PRIVATE ${CATCH2_INCLUDE_DIRS})
+endif()
 
 if(CORD_COVERAGE)
     target_compile_options(cord_tests PRIVATE --coverage -O0 -g)
@@ -33,7 +40,7 @@ include(Catch)
 catch_discover_tests(cord_tests)
 
 # Compile-fail tests: verify unsupported types are rejected at compile time
-foreach(CF_TEST test_type_assertions test_get_or_type_safety test_min_type_safety test_max_type_safety test_set_type_safety)
+foreach(CF_TEST test_type_assertions test_get_or_type_safety test_min_type_safety test_max_type_safety test_set_type_safety test_custom_struct_unregistered)
     try_compile(
         COMPILED_${CF_TEST}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/${CF_TEST}.cpp

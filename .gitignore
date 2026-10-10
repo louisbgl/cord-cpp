@@ -38,10 +38,6 @@ test_output/
 # Example generated files
 examples/writing/new_save.conf
 
-# Markdown (keep only README)
-*.md
-!README.md
-
 #Benchmarks
 benchmarks/*
 !benchmarks/*.cpp

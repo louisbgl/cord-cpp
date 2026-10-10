@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <initializer_list>
 #include <source_location>
 #include <string>
@@ -11,6 +12,7 @@
 
 #include "common.hpp"
 #include "exception.hpp"
+#include "struct_value.hpp"
 
 namespace cord {
 
@@ -21,27 +23,32 @@ namespace cord {
 */
 template<typename T>
 constexpr FieldType typeOf() {
-    if constexpr (std::is_same_v<T, bool>) {
+    if constexpr (std::is_same_v<T, bool>)
         return FieldType::BOOL;
-    } else if constexpr (std::is_same_v<T, int>) {
+    else if constexpr (std::is_same_v<T, int>)
         return FieldType::INT;
-    } else if constexpr (std::is_same_v<T, float>) {
+    else if constexpr (std::is_same_v<T, float>)
         return FieldType::FLOAT;
-    } else if constexpr (std::is_same_v<T, double>) {
+    else if constexpr (std::is_same_v<T, double>)
         return FieldType::DOUBLE;
-    } else if constexpr (std::is_same_v<T, std::string>) {
+    else if constexpr (std::is_same_v<T, std::string>)
         return FieldType::STRING;
-    } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+    else if constexpr (std::is_same_v<T, std::vector<bool>>)
         return FieldType::VECTOR_BOOL;
-    } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+    else if constexpr (std::is_same_v<T, std::vector<int>>)
         return FieldType::VECTOR_INT;
-    } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+    else if constexpr (std::is_same_v<T, std::vector<float>>)
         return FieldType::VECTOR_FLOAT;
-    } else if constexpr (std::is_same_v<T, std::vector<double>>) {
+    else if constexpr (std::is_same_v<T, std::vector<double>>)
         return FieldType::VECTOR_DOUBLE;
-    } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+    else if constexpr (std::is_same_v<T, std::vector<std::string>>)
         return FieldType::VECTOR_STRING;
-    }
+    else if constexpr (is_custom_struct_v<T>)
+        return FieldType::CUSTOM;
+    else if constexpr (is_vector_of_custom_struct_v<T>)
+        return FieldType::VECTOR_CUSTOM;
+    else
+        static_assert(false, "typeOf<T>() called with unsupported type T");
 }
 
 /**
@@ -54,6 +61,10 @@ public:
     template<typename T>
     Value(T value) : _value(value) {}
 
+    // Special overloads for char* and const char* to convert to std::string (convenience)
+    Value(const char* value) : _value(std::string(value)) {}
+    Value(char* value) : _value(std::string(value)) {}
+
     /**
      * @brief Converts the value to the specified type.
      * @tparam T The type to convert to.
@@ -65,7 +76,24 @@ public:
     T as(std::source_location loc = std::source_location::current()) const {
         static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("Value::as<T>()"));
         try {
-            return std::get<T>(_value);
+            if constexpr (std::is_same_v<T, StructValue>) {
+                return std::get<StructValue>(_value);
+            }
+            else if constexpr (is_custom_struct_v<T>) {
+                // Extract StructValue, unwrap to T
+                return std::get<StructValue>(_value).as<T>();
+            }
+            else if constexpr (is_vector_of_custom_struct_v<T>) {
+                // Extract vector<StructValue>, convert each to T::value_type
+                const auto& vec = std::get<std::vector<StructValue>>(_value);
+                std::vector<typename T::value_type> result;
+                for (const auto& sv : vec)
+                    result.push_back(sv.as<typename T::value_type>());
+                return result;
+            }
+            else {
+                return std::get<T>(_value);
+            }
         } catch (const std::bad_variant_access&) {
             throw CordException(loc.file_name(), loc.line(), "Type mismatch in as<T>(): value holds a different type");
         }
@@ -88,7 +116,9 @@ public:
             case 7: return FieldType::VECTOR_FLOAT;
             case 8: return FieldType::VECTOR_DOUBLE;
             case 9: return FieldType::VECTOR_STRING;
-            default: throw CordException("Unknown type");
+            case 10: return FieldType::CUSTOM;
+            case 11: return FieldType::VECTOR_CUSTOM;
+            default: throw CordException("Value::getType(): Unknown type");
         }
     }
 
@@ -109,14 +139,17 @@ public:
             case 7: return valueToString(std::get<std::vector<float>>(_value));
             case 8: return valueToString(std::get<std::vector<double>>(_value));
             case 9: return valueToString(std::get<std::vector<std::string>>(_value));
-            default: throw CordException("Unknown type");
+            case 10: return valueToString(std::get<StructValue>(_value));
+            case 11: return valueToString(std::get<std::vector<StructValue>>(_value));
+            default: throw CordException("Value::toString(): Unknown type");
         }
     }
 
 private:
     std::variant<bool, int, float, double, std::string,
         std::vector<bool>, std::vector<int>, std::vector<float>,
-        std::vector<double>, std::vector<std::string>
+        std::vector<double>, std::vector<std::string>,
+        StructValue, std::vector<StructValue> // <- supports custom structs and vectors of them
     > _value;
 };
 
@@ -128,6 +161,7 @@ public:
     virtual ~IField() = default;
 
     virtual std::string getName() const = 0;
+    virtual std::string getTypeName() const = 0;
     virtual FieldType getType() const = 0;
     virtual bool hasDefault() const = 0;
     virtual Value getDefault() const = 0;
@@ -152,6 +186,10 @@ public:
     // Gets the name of the field
     std::string getName() const override {
         return _name;
+    }
+
+    std::string getTypeName() const override {
+        return fieldTypeName(getType());
     }
 
     // Gets the type of the field
@@ -248,7 +286,12 @@ public:
         return choices;
     }
 
-    // Marks the field as required
+    /**
+     * @brief Mark the field as required.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
     Field<T>& required(std::source_location loc = std::source_location::current()) {
         if (_default_value.has_value())
             throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
@@ -256,7 +299,13 @@ public:
         return *this;
     }
 
-    // Sets the default value of the field
+    /**
+     * @brief Sets the default value of the field.
+     * @param val The default value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
     Field<T>& default_(T val, std::source_location loc = std::source_location::current()) {
         if (_required)
             throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
@@ -267,7 +316,9 @@ public:
     /**
      * @brief Sets the minimum allowed value (numeric) or minimum length/count (string/vector).
      * @param val The minimum value (inclusive). For numeric types, compared directly. For string/vector, specifies minimum length or element count.
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the minimum value is greater than the maximum value (if set).
      */
     Field<T>& min(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
@@ -280,7 +331,9 @@ public:
     /**
      * @brief Sets the minimum length (string) or minimum element count (vector).
      * @param count The minimum size (inclusive).
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the minimum size is greater than the maximum size (if set).
      */
     Field<T>& min(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
@@ -293,7 +346,9 @@ public:
     /**
      * @brief Sets the maximum allowed value (numeric) or maximum length/count (string/vector).
      * @param val The maximum value (inclusive). For numeric types, compared directly. For string/vector, specifies maximum length or element count.
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the maximum value is less than the minimum value (if set).
      */
     Field<T>& max(T val, std::source_location loc = std::source_location::current()) {
         static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
@@ -306,7 +361,9 @@ public:
     /**
      * @brief Sets the maximum length (string) or maximum element count (vector).
      * @param count The maximum size (inclusive).
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the maximum size is less than the minimum size (if set).
      */
     Field<T>& max(size_t count, std::source_location loc = std::source_location::current()) {
         static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
@@ -319,7 +376,9 @@ public:
     /**
      * @brief Sets the allowed values for the field.
      * @param values The list of allowed values.
+     * @param loc The source location of the call.
      * @return Reference to this field for chaining.
+     * @throws CordException if the list of allowed values is empty.
      *
      * @note This method performs compile-time checks to ensure that the type T is supported.
      */
@@ -336,6 +395,198 @@ private:
     std::string _name;
     std::optional<T> _default_value = std::nullopt;
     bool _required = false;
+    std::optional<T> _min_value = std::nullopt;
+    std::optional<T> _max_value = std::nullopt;
+    std::optional<size_t> _min_size = std::nullopt;
+    std::optional<size_t> _max_size = std::nullopt;
+    std::optional<std::vector<T>> _allowed_values = std::nullopt;
+};
+
+// Forward declare for CustomField
+class Schema;
+template<typename T> class CustomStruct;
+
+/**
+ * @brief Base class for custom struct fields (type erasure)
+ */
+class CustomFieldBase : public IField {
+public:
+    virtual ParseResult<StructValue> parseCustom(std::string_view str, const Schema* s) const = 0;
+    virtual ParseResult<std::vector<StructValue>> parseCustomVector(std::string_view str, const Schema* s) const = 0;
+};
+
+// Helper to extract element type: vector<T> -> T, T -> T
+template<typename T>
+struct ExtractElem { using type = T; };
+
+template<typename T>
+struct ExtractElem<std::vector<T>> { using type = T; };
+
+template<typename T>
+using ExtractElem_t = typename ExtractElem<T>::type;
+
+/**
+ * @brief Field representing a custom struct type
+ */
+template<typename T>
+class CustomField : public CustomFieldBase {
+private:
+    // Extract element type: vector<Sound> -> Sound, Sound -> Sound
+    using ElemType = ExtractElem_t<T>;
+
+public:
+    // Defined in schema.hpp after Schema is complete
+    CustomField(std::string name, const CustomStruct<ElemType>& schema);
+
+    // Defined in schema.hpp after Schema is complete
+    ParseResult<StructValue> parseCustom(std::string_view str, const Schema* s) const override;
+
+    // Defined in schema.hpp after Schema is complete
+    ParseResult<std::vector<StructValue>> parseCustomVector(std::string_view str, const Schema* s) const override;
+
+    std::string getName() const override { return _name; }
+    FieldType getType() const override { return typeOf<T>(); }
+    std::string getTypeName() const override { return _schema_name; }
+
+    bool hasDefault() const override { return _default_value.has_value(); }
+    Value getDefault() const override { return Value(StructValue(*_default_value)); }
+    bool isRequired() const override { return _required; }
+
+    std::optional<std::string> checkConstraints(const Value& value) const override {
+        if constexpr (is_custom_struct_v<T>) {
+            T instance = value.as<T>();
+            for (const auto& field : _schema.getFields()) {
+                Value field_value = _schema.getField(&instance, field->getName());
+                auto err = field->checkConstraints(field_value);
+                if (err) return err;
+            }
+        } else if constexpr (is_vector_of_custom_struct_v<T>) {
+            T vec = value.as<T>();
+            for (size_t i = 0; i < vec.size(); ++i) {
+                for (const auto& field : _schema.getFields()) {
+                    Value field_value = _schema.getField(&vec[i], field->getName());
+                    auto err = field->checkConstraints(field_value);
+                    if (err) return "element at index " + std::to_string(i) + ": " + *err;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::string describeConstraints() const override { return ""; } // TODO
+
+    std::string getSchemaName() const { return _schema_name; }
+
+    /**
+     * @brief Mark the field as required.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
+    CustomField<T>& required(std::source_location loc = std::source_location::current()) {
+        if (_default_value.has_value())
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
+        _required = true;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the default value of the field.
+     * @param val The default value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the field already has a default value.
+     */
+    CustomField<T>& default_(T val, std::source_location loc = std::source_location::current()) {
+        if (_required)
+            throw CordException(loc.file_name(), loc.line(), "Field '" + _name + "' can't be both required and have a default value");
+        _default_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the minimum value for the field.
+     * @param val The minimum value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the minimum value is greater than the maximum value (if set).
+     */
+    CustomField<T>& min(T val, std::source_location loc = std::source_location::current()) {
+        static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("min()"));
+        if (_max_value.has_value() && val > *_max_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
+        _min_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the minimum size for the field.
+     * @param count The minimum size.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the minimum size is greater than the maximum size (if set).
+     */
+    CustomField<T>& min(size_t count, std::source_location loc = std::source_location::current()) {
+        static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("min()"));
+        if (_max_size.has_value() && count > *_max_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
+        _min_size = count;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum value for the field.
+     * @param val The maximum value.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the maximum value is less than the minimum value (if set).
+     */
+    CustomField<T>& max(T val, std::source_location loc = std::source_location::current()) {
+        static_assert(is_supported_numeric_type_v<T>, CORD_NUMERIC_ONLY("max()"));
+        if (_min_value.has_value() && val < *_min_value)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no value can satisfy these constraints");
+        _max_value = val;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the maximum size for the field.
+     * @param count The maximum size.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the maximum size is less than the minimum size (if set).
+     */
+    CustomField<T>& max(size_t count, std::source_location loc = std::source_location::current()) {
+        static_assert(std::is_same_v<T, std::string> || is_supported_vector_type_v<T>, CORD_UNSUPPORTED_TYPE_EXCLUDE_BOOL("max()"));
+        if (_min_size.has_value() && count < *_min_size)
+            throw CordException(loc.file_name(), loc.line(), "min() > max(): no size can satisfy these constraints");
+        _max_size = count;
+        return *this;
+    }
+
+    /**
+     * @brief Sets the list of allowed values for the field.
+     * @param values The list of allowed values.
+     * @param loc The source location of the call.
+     * @return A reference to this field for chaining.
+     * @throws CordException if the list of allowed values is empty.
+     */
+    CustomField<T>& oneOf(std::initializer_list<T> values, std::source_location loc = std::source_location::current()) {
+        static_assert(is_supported_value_type_v<T>, CORD_UNSUPPORTED_TYPE("oneOf()"));
+        if (values.size() == 0) {
+            throw CordException(loc.file_name(), loc.line(), "oneOf() with empty list: no value can satisfy these constraints");
+        }
+        _allowed_values = std::vector<T>(values);
+        return *this;
+    }
+
+private:
+    std::string _name;
+    std::string _schema_name;
+    CustomStruct<ElemType> _schema;
+
+    bool _required = false;
+    std::optional<T> _default_value = std::nullopt;
     std::optional<T> _min_value = std::nullopt;
     std::optional<T> _max_value = std::nullopt;
     std::optional<size_t> _min_size = std::nullopt;

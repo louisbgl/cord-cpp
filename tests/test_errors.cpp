@@ -97,3 +97,117 @@ TEST_CASE("Unknown key in strict mode includes line number", "[errors]") {
     REQUIRE(errors[0].line.has_value());
     CHECK(errors[0].line.value() == 2);
 }
+
+// ============================================================================
+// Custom Struct Type Mismatch Errors
+// ============================================================================
+
+struct TestStruct {
+    int number = 0;
+    std::string text = "";
+    std::vector<int> values;
+};
+CORD_REGISTER_STRUCT(TestStruct);
+
+TEST_CASE("Custom struct: type mismatch on int field", "[errors][custom_struct]") {
+    cord::CustomStruct<TestStruct> def("TestStruct");
+    def.add("number", &TestStruct::number);
+    def.add("text", &TestStruct::text);
+    def.add("values", &TestStruct::values);
+
+    cord::Schema schema;
+    schema.add<TestStruct>("obj", def);
+
+    auto result = schema.parse(R"(obj = { number = "not_a_number", text = "hello", values = [] })");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("obj") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: type mismatch on string field", "[errors][custom_struct]") {
+    cord::CustomStruct<TestStruct> def("TestStruct");
+    def.add("number", &TestStruct::number);
+    def.add("text", &TestStruct::text);
+    def.add("values", &TestStruct::values);
+
+    cord::Schema schema;
+    schema.add<TestStruct>("obj", def);
+
+    auto result = schema.parse(R"(obj = { number = 42, text = 123, values = [] })");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("obj") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: type mismatch on vector field", "[errors][custom_struct]") {
+    cord::CustomStruct<TestStruct> def("TestStruct");
+    def.add("number", &TestStruct::number);
+    def.add("text", &TestStruct::text);
+    def.add("values", &TestStruct::values);
+
+    cord::Schema schema;
+    schema.add<TestStruct>("obj", def);
+
+    auto result = schema.parse(R"(obj = { number = 42, text = "hello", values = "not_an_array" })");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("obj") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: malformed object missing opening brace", "[errors][custom_struct]") {
+    cord::CustomStruct<TestStruct> def("TestStruct");
+    def.add("number", &TestStruct::number);
+    def.add("text", &TestStruct::text);
+    def.add("values", &TestStruct::values);
+
+    cord::Schema schema;
+    schema.add<TestStruct>("obj", def);
+
+    auto result = schema.parse(R"(obj = number = 42, text = "hello" })");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("expected '{'") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: malformed object missing closing brace", "[errors][custom_struct]") {
+    cord::CustomStruct<TestStruct> def("TestStruct");
+    def.add("number", &TestStruct::number);
+    def.add("text", &TestStruct::text);
+    def.add("values", &TestStruct::values);
+
+    cord::Schema schema;
+    schema.add<TestStruct>("obj", def);
+
+    auto result = schema.parse(R"(obj = { number = 42, text = "hello")");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("missing closing '}'") != std::string::npos);
+}
+
+TEST_CASE("Custom struct: empty object with required field", "[errors][custom_struct]") {
+    cord::CustomStruct<TestStruct> def("TestStruct");
+    def.add("number", &TestStruct::number).required();
+    def.add("text", &TestStruct::text);
+    def.add("values", &TestStruct::values);
+
+    cord::Schema schema;
+    schema.add<TestStruct>("obj", def);
+
+    auto result = schema.parse(R"(obj = {})");
+    REQUIRE(result.hasErrors());
+
+    auto errors = result.getErrors();
+    REQUIRE_FALSE(errors.empty());
+    CHECK(errors[0].message.find("missing required field") != std::string::npos);
+    CHECK(errors[0].message.find("number") != std::string::npos);
+}
