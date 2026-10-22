@@ -54,7 +54,8 @@ curl -O https://raw.githubusercontent.com/louisbgl/cord-cpp/main/cord.hpp
 include(FetchContent)
 FetchContent_Declare(cord
   GIT_REPOSITORY https://github.com/louisbgl/cord-cpp.git
-  GIT_TAG main)
+  GIT_TAG v1.0.1  # Or any other release tag
+  GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(cord)
 
 target_link_libraries(your_app PRIVATE cord)
