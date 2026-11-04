@@ -43,7 +43,7 @@ flag = True                 # bool is lowercase only
 true = 1                    # true/false are reserved, not keys
 name = bob                  # strings must be quoted
 s = "bad \q"                # unknown escape
-n = 123abc                  # tokens must be separated
+n = 123abc                  # numbers must be separated
 list = [1 2]                # elements need commas
 list = [1, 2                # unclosed bracket
 db.host = "x"               # no dots in keys
@@ -83,8 +83,8 @@ COMMENT    = "#" { ? any byte ? - NEWLINE } ;
 
 1. Whitespace (space, tab) between tokens is optional; any amount is skipped.
 2. `NEWLINE` is not whitespace: it is a token, significant to the syntax grammar.
-3. Maximal munch: the longest match wins. A token directly followed by a letter, digit or `_`
-   with no separator is an error (`123abc`, `1.2.3`).
+3. Maximal munch: the longest match wins. A number directly followed by a letter, `_` or `.`
+   is an error (`123abc`, `1.2.3`, `5.`).
 4. `true` and `false` are reserved: they always lex as `BOOL`, never as `KEY`.
 5. Keys are case-sensitive. `BOOL` is lowercase only.
 6. Comments run from `#` to end of line and are always enabled. A `#` inside a `STRING` is
