@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string_view>
 
 namespace cord {
@@ -21,19 +22,146 @@ enum class TokenType {
     RBrace,
     Newline,
     Eof,
+    Error, // Not in the grammar: invalid input, reported by the parser when it reaches it.
 };
 
 /**
- * @brief Turns a config string into tokens.
+ * @brief A single token and where it starts in the source.
+ */
+struct Token {
+    TokenType type;
+    std::string_view lexeme;       // Raw slice of the source: a String keeps its quotes and undecoded escapes.
+    std::size_t line = 1;          // 1-based.
+    std::size_t column = 1;        // 1-based, counted in bytes.
+    std::string_view message = {}; // Why the input is invalid. Set only on Error, points to a string literal.
+};
+
+/**
+ * @brief Turns a config string into tokens, one at a time, on demand.
  *
- * The public interface is undecided: full pass over the source or next() on demand.
+ * Does not own the source: it must outlive the lexer and every token it returns.
  */
 class Lexer {
 public:
     explicit Lexer(std::string_view source) : _source(source) {}
 
+    /**
+     * @brief Scans and returns the next token.
+     *
+     * Skips whitespace and comments. Newlines inside brackets are dropped.
+     * Once the end of the source is reached, every call returns Eof.
+     */
+    Token next() {
+        _skipWhitespaces();
+        if (_lexed >= _source.length()) return _createToken(TokenType::Eof, 0);
+
+        if (_peek() == '\"') return _getStringToken();
+
+        if (_source.substr(_lexed, 5) == "false") return _createToken(TokenType::Bool, 5);
+        if (_source.substr(_lexed, 4) == "true") return _createToken(TokenType::Bool, 4);
+
+        if (_source.substr(_lexed, 2) == "\r\n") return _createToken(TokenType::Newline, 2);
+        switch (_peek()) {
+            case '\n': return _createToken(TokenType::Newline, 1);
+            case ',': return _createToken(TokenType::Comma, 1);
+            case '=': return _createToken(TokenType::Equals, 1);
+            case '{': return _createToken(TokenType::LBrace, 1);
+            case '}': return _createToken(TokenType::RBrace, 1);
+            case '[': return _createToken(TokenType::LBracket, 1);
+            case ']': return _createToken(TokenType::RBracket, 1);
+        }
+        
+        return _createToken(TokenType::Error, 1, "Not implemented");
+    }
+
 private:
     std::string_view _source;
+    std::size_t _lexed = 0;
+    std::size_t _line = 1;
+    std::size_t _column = 1;
+
+    Token _createToken(TokenType type, std::size_t size, std::string_view msg = {}) {
+        Token t = {
+            .type = type,
+            .lexeme = _source.substr(_lexed, size),
+            .line = _line,
+            .column = _column,
+            .message = msg,
+        };
+        if (type == TokenType::String) _advance(size, false);
+        else _advance(size);
+        return t;
+    }
+
+    char _peek(std::size_t count = 0) {
+        if (_lexed + count >= _source.length()) return '\0';
+        return _source.at(_lexed + count);
+    }
+
+    void _advance(std::size_t count = 1, bool allow_line_change = true) {
+        while (count > 0) {
+            if (allow_line_change && _peek() == '\n') {
+                _column = 1;
+                _line++;
+            } else {
+                _column++;
+            }
+            _lexed++;
+            count--;
+        }
+    }
+    
+    void _skipWhitespaces() {
+        while (true) {
+            char c = _peek();
+            if (c == ' ' || c == '\t')
+                _advance();
+            else
+                break;
+        }
+    }
+
+    bool _isLineEnd(std::size_t offset) {
+        if (_lexed + offset >= _source.length()) return true;
+        const char c = _peek(offset);
+        return c == '\n' || (c == '\r' && _peek(offset + 1) == '\n');
+    }
+
+    static bool _isEscapable(char c) {
+        return c == '"' || c == '\\' || c == 'n' || c == 't' || c == 'r';
+    }
+
+    Token _getStringToken() {
+        std::string_view escapeError;
+        std::size_t idx = 1; // skip past opening quote
+
+        while (!_isLineEnd(idx)) {
+            const char c = _peek(idx);
+
+            if (c == '"') {
+                if (!escapeError.empty()) return _createToken(TokenType::Error, idx + 1, escapeError);
+                return _createToken(TokenType::String, idx + 1); // include the closing quote
+            }
+
+            if (c != '\\') {
+                idx++;
+                continue;
+            }
+
+            // A backslash at the end of a line escapes nothing, the string is just unterminated.
+            if (_isLineEnd(idx + 1)) {
+                idx++;
+                continue;
+            }
+
+            // Consuming the pair is what makes `\"` not close the string and `\\"` close it.
+            if (!_isEscapable(_peek(idx + 1)) && escapeError.empty()) escapeError = "Unknown escape sequence";
+            idx += 2;
+        }
+
+        return _createToken(TokenType::Error, idx, "Unterminated string");
+    }
+
 };
 
 } // namespace cord
