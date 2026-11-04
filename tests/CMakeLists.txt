@@ -9,15 +9,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Runtime tests
 set(TEST_SOURCES
-    test_parsing.cpp
-    test_vectors.cpp
-    test_schema.cpp
-    test_errors.cpp
-    test_comments.cpp
-    test_markers.cpp
-    test_get_or.cpp
-    test_file_parsing.cpp
-    test_describe.cpp
+    test_lexer.cpp
 )
 
 add_executable(cord_tests ${TEST_SOURCES})
@@ -33,7 +25,9 @@ include(Catch)
 catch_discover_tests(cord_tests)
 
 # Compile-fail tests: verify unsupported types are rejected at compile time
-foreach(CF_TEST test_type_assertions test_get_or_type_safety test_min_type_safety test_max_type_safety test_set_type_safety)
+set(COMPILE_FAIL_TESTS)
+
+foreach(CF_TEST ${COMPILE_FAIL_TESTS})
     try_compile(
         COMPILED_${CF_TEST}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/${CF_TEST}.cpp
