@@ -2,12 +2,12 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/catch_tostring.hpp>
 
-#include <cstdio>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "lexer.hpp"
+#include "test_helpers.hpp"
 
 using cord::Lexer;
 using cord::Token;
@@ -64,32 +64,6 @@ std::vector<TokenType> types(std::string_view source, bool stop_at_error = true)
     std::vector<TokenType> result;
     for (const Token& token : lex(source, stop_at_error)) result.push_back(token.type);
     return result;
-}
-
-/**
- * @brief Wraps text in backticks with control and non-ASCII bytes spelled out, e.g. `a<CR><LF>`.
- *
- * Backslashes stay as they are, so a real newline can't be confused with an escape in a string.
- */
-std::string show(std::string_view text) {
-    std::string result = "`";
-    for (const char c : text) {
-        const auto byte = static_cast<unsigned char>(c);
-        if (c == '\n') {
-            result += "<LF>";
-        } else if (c == '\r') {
-            result += "<CR>";
-        } else if (c == '\t') {
-            result += "<TAB>";
-        } else if (byte < 0x20 || byte >= 0x7F) {
-            char hex[8];
-            std::snprintf(hex, sizeof(hex), "<%02X>", byte);
-            result += hex;
-        } else {
-            result += c;
-        }
-    }
-    return result + "`";
 }
 
 /**
