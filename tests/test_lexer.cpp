@@ -40,28 +40,29 @@ struct Catch::StringMaker<TokenType> {
 namespace {
 
 /**
- * @brief Lexes up to and including the first Eof or Error.
+ * @brief Lexes up to and including Eof, or the first Error when stop_at_error is set.
  *
- * Stopping at Error keeps these tests independent of how the lexer resumes after one.
+ * Most tests stop at Error, so they stay independent of how the lexer resumes after one.
  * The cap turns a next() that does not advance into a failed test instead of eating all memory.
  */
-std::vector<Token> lex(std::string_view source) {
+std::vector<Token> lex(std::string_view source, bool stop_at_error = true) {
     constexpr std::size_t max_tokens = 100;
 
     Lexer lexer(source);
     std::vector<Token> tokens;
     do {
         tokens.push_back(lexer.next());
-    } while (tokens.back().type != Eof && tokens.back().type != Error && tokens.size() < max_tokens);
+    } while (tokens.back().type != Eof && !(stop_at_error && tokens.back().type == Error)
+             && tokens.size() < max_tokens);
     return tokens;
 }
 
 /**
- * @brief Token types of lex(source), the final Eof or Error included.
+ * @brief Token types of lex(source, stop_at_error), the final Eof or Error included.
  */
-std::vector<TokenType> types(std::string_view source) {
+std::vector<TokenType> types(std::string_view source, bool stop_at_error = true) {
     std::vector<TokenType> result;
-    for (const Token& token : lex(source)) result.push_back(token.type);
+    for (const Token& token : lex(source, stop_at_error)) result.push_back(token.type);
     return result;
 }
 
@@ -94,9 +95,9 @@ std::string show(std::string_view text) {
 /**
  * @brief Describes a source and what the lexer made of it, printed with every failure.
  */
-std::string trace(std::string_view source) {
+std::string trace(std::string_view source, bool stop_at_error = true) {
     std::string result = "input: " + show(source) + "\nlexer returned:";
-    for (const Token& token : lex(source)) {
+    for (const Token& token : lex(source, stop_at_error)) {
         result += "\n  " + Catch::StringMaker<TokenType>::convert(token.type) + " " + show(token.lexeme)
                 + " at " + std::to_string(token.line) + ":" + std::to_string(token.column);
         if (!token.message.empty()) result += " (" + std::string(token.message) + ")";
@@ -112,6 +113,13 @@ std::string trace(std::string_view source) {
     do {                                                                    \
         INFO(trace(source));                                                \
         CHECK(types(source) == std::vector<TokenType>{__VA_ARGS__});        \
+    } while (false)
+
+/** Same as CHECK_TYPES, but keeps lexing after an Error. */
+#define CHECK_TYPES_THROUGH_ERRORS(source, ...)                             \
+    do {                                                                    \
+        INFO(trace(source, false));                                         \
+        CHECK(types(source, false) == std::vector<TokenType>{__VA_ARGS__}); \
     } while (false)
 
 /** The whole source is one token of this type, followed by Eof. */
@@ -433,4 +441,160 @@ TEST_CASE("A full config", "[lexer][integration]") {
         RBrace, RBrace, Newline,
         Key, Equals, Bool,
         Eof);
+}
+
+TEST_CASE("Resuming after an Error", "[lexer][error]") {
+    SECTION("every Error moves forward") {
+        CHECK_TYPES_THROUGH_ERRORS("@@", Error, Error, Eof);
+        CHECK_TYPES_THROUGH_ERRORS("a @ b", Key, Error, Key, Eof);
+    }
+    SECTION("the newline after an Error is still emitted, for the parser's recovery") {
+        CHECK_TYPES_THROUGH_ERRORS("123abc\nb", Error, Newline, Key, Eof);
+        CHECK_TYPES_THROUGH_ERRORS("\"abc\nb", Error, Newline, Key, Eof);
+        CHECK_TYPES_THROUGH_ERRORS("\"abc\r\nb", Error, Newline, Key, Eof);
+    }
+    SECTION("the content of a bad string is never lexed as tokens") {
+        CHECK_TYPES_THROUGH_ERRORS(R"("\q [ x" b)", Error, Key, Eof);
+        CHECK_TYPES_THROUGH_ERRORS("\"abc [\nb", Error, Newline, Key, Eof);
+    }
+    SECTION("an Error does not change the bracket depth") {
+        CHECK_TYPES_THROUGH_ERRORS("[\"\\q\"\n]\n", LBracket, Error, RBracket, Newline, Eof);
+    }
+    SECTION("position is still right afterwards") {
+        Lexer lexer("\"\\q\"\n  a");
+        lexer.next();
+        lexer.next();
+        const Token token = lexer.next();
+        CHECK(token.type == Key);
+        CHECK(token.line == 2);
+        CHECK(token.column == 3);
+    }
+}
+
+TEST_CASE("What an Error covers", "[lexer][error]") {
+    SECTION("a whole malformed number") {
+        auto source = GENERATE(as<std::string_view>{}, "123abc", "1.2.3", "0xFF", "1e5", "1_000", "1.5x", "-1.5.2");
+        CHECK_ERROR(source);
+        CHECK_LEXEME(source, 0, source);
+    }
+    SECTION("a number cut short") {
+        CHECK_LEXEME("-", 0, "-");
+        CHECK_LEXEME("- 1", 0, "-");
+        CHECK_LEXEME("5.", 0, "5.");
+    }
+    SECTION("a whole string with an unknown escape") {
+        CHECK_LEXEME(R"("bad \q here" b)", 0, R"("bad \q here")");
+    }
+    SECTION("an unterminated string, up to the end of the line") {
+        CHECK_LEXEME(R"("abc)", 0, R"("abc)");
+        CHECK_LEXEME(R"("abc\)", 0, R"("abc\)");
+        CHECK_LEXEME("\"abc\nb", 0, "\"abc");
+        CHECK_LEXEME("\"abc\r\nb", 0, "\"abc");
+    }
+    SECTION("one invalid character") {
+        CHECK_LEXEME("@abc", 0, "@");
+    }
+}
+
+TEST_CASE("Error positions", "[lexer][error][position]") {
+    SECTION("an unknown escape is reported at the opening quote") {
+        CHECK_POSITION(R"(a = "\q")", 2, 1, 5);
+    }
+    SECTION("on a later line") {
+        CHECK_POSITION("a\n  @", 2, 2, 3);
+    }
+    SECTION("a string inside brackets, after dropped newlines") {
+        CHECK_POSITION("[\n  \"\\q\"\n]", 1, 2, 3);
+    }
+}
+
+TEST_CASE("Tokens with no separator", "[lexer][adjacent]") {
+    SECTION("a string followed by anything, left to the parser") {
+        CHECK_TYPES(R"("a"b)", String, Key, Eof);
+        CHECK_TYPES(R"("a""b")", String, String, Eof);
+        CHECK_TYPES(R"("a"1)", String, Int, Eof);
+    }
+    SECTION("reserved words") {
+        CHECK_SINGLE("truefalse", Key);
+        CHECK_TYPES("true=false", Bool, Equals, Bool, Eof);
+        CHECK_TYPES("[true,false]", LBracket, Bool, Comma, Bool, RBracket, Eof);
+    }
+    SECTION("comments") {
+        CHECK_TYPES(R"("a"#comment)", String, Eof);
+        CHECK_TYPES("]#comment", RBracket, Eof);
+    }
+}
+
+TEST_CASE("Unbalanced brackets", "[lexer][depth]") {
+    SECTION("mismatched closers still count, the parser rejects them") {
+        CHECK_TYPES("[}\n", LBracket, RBrace, Newline, Eof);
+        CHECK_TYPES("{]\n", LBrace, RBracket, Newline, Eof);
+    }
+    SECTION("an unclosed bracket swallows later newlines") {
+        CHECK_TYPES("[\n\na\n", LBracket, Key, Eof);
+    }
+    SECTION("the end of the source inside brackets still reaches Eof") {
+        CHECK_TYPES("[", LBracket, Eof);
+        CHECK_TYPES("[ ", LBracket, Eof);
+        CHECK_TYPES("[ # comment", LBracket, Eof);
+        CHECK_TYPES("{[\n", LBrace, LBracket, Eof);
+    }
+    SECTION("comments ending in CRLF") {
+        CHECK_TYPES("[ # comment\r\n]", LBracket, RBracket, Eof);
+    }
+}
+
+TEST_CASE("Odd bytes", "[lexer][bytes]") {
+    using namespace std::string_view_literals;
+
+    SECTION("a NUL byte does not end the source") {
+        CHECK_SINGLE("\"a\0b\""sv, String);
+        CHECK_TYPES("# a\0b\nc"sv, Newline, Key, Eof);
+        CHECK_TYPES_THROUGH_ERRORS("a\0b"sv, Key, Error, Key, Eof);
+    }
+    SECTION("a lone CR is plain content in strings and comments") {
+        CHECK_SINGLE("\"a\rb\"", String);
+        CHECK_TYPES("# a\rb", Eof);
+    }
+    SECTION("a lone CR at the end of the source is invalid") {
+        CHECK_TYPES_THROUGH_ERRORS("a\r", Key, Error, Eof);
+    }
+    SECTION("whitespace before a CRLF") {
+        CHECK_TYPES("a \t\r\nb", Key, Newline, Key, Eof);
+    }
+}
+
+TEST_CASE("LF and CRLF lex the same", "[lexer][integration]") {
+    const std::string lf =
+        "# comments run to end of line\n"
+        "name    = \"cord\"            # string\n"
+        "ratio   = -0.75\n"
+        "verbose = false\n"
+        "empty   = []\n"
+        "\n"
+        "tags = [\"fast\", \"small\",]\n"
+        "grid = [[1, 2], [3, 4]]\n"
+        "player = { name = \"bob\", pos = { x = 1.5, y = -2.0 } }\n"
+        "entities = [\n"
+        "    { name = \"a\", hp = 10 },\n"
+        "    { name = \"b\", hp = 20 },\n"
+        "]\n";
+
+    std::string crlf;
+    for (const char c : lf) crlf += c == '\n' ? std::string("\r\n") : std::string(1, c);
+
+    const auto lf_tokens = lex(lf, false);
+    const auto crlf_tokens = lex(crlf, false);
+    INFO(trace(lf, false));
+
+    REQUIRE(lf_tokens.size() == crlf_tokens.size());
+    CHECK(lf_tokens.back().type == Eof);
+    for (std::size_t i = 0; i < lf_tokens.size(); i++) {
+        CAPTURE(i);
+        CHECK(lf_tokens[i].type != Error);
+        CHECK(lf_tokens[i].type == crlf_tokens[i].type);
+        CHECK(lf_tokens[i].line == crlf_tokens[i].line);
+        CHECK(lf_tokens[i].column == crlf_tokens[i].column);
+        if (lf_tokens[i].type != Newline) CHECK(lf_tokens[i].lexeme == crlf_tokens[i].lexeme);
+    }
 }
