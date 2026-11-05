@@ -56,9 +56,12 @@ public:
     }
 
 private:
+    static constexpr std::size_t MAX_DEPTH = 256;
+
     Lexer _lexer;
     Token _current;
     ParseResult _result;
+    std::size_t _depth = 0;
 
     void _advance() {
         _current = _lexer.next();
@@ -161,13 +164,27 @@ private:
             case TokenType::Int:    node.value = Int{std::string{_current.lexeme}}; break;
             case TokenType::Float:  node.value = Float{std::string{_current.lexeme}}; break;
             case TokenType::String: node.value = String{_treatLexeme(_current.lexeme)}; break;
-            case TokenType::LBracket: return _parseArray();
-            case TokenType::LBrace:   return _parseObject();
+            case TokenType::LBracket:
+            case TokenType::LBrace:
+                return _parseNested();
             default:
                 _pushExpected("a value");
                 return std::nullopt;
         }
         _advance();
+        return node;
+    }
+
+    // Bounds the recursion, so a deeply nested config is an error and not a stack overflow.
+    std::optional<Node> _parseNested() {
+        if (_depth == MAX_DEPTH) {
+            _pushDiagnostic(_current, "Nested too deep, the limit is " + std::to_string(MAX_DEPTH) + " levels");
+            return std::nullopt;
+        }
+
+        _depth++;
+        auto node = _current.type == TokenType::LBracket ? _parseArray() : _parseObject();
+        _depth--;
         return node;
     }
 

@@ -145,6 +145,15 @@ std::string positions(const std::vector<cord::Diagnostic>& diagnostics) {
         CHECK(dump(result.tree) == (expected_tree));                        \
     } while (false)
 
+/** The first diagnostic of the source mentions this text. */
+#define CHECK_MESSAGE_HAS(source, text)                                     \
+    do {                                                                    \
+        const ParseResult result = Parser(source).parse();                  \
+        INFO(trace(source, result));                                        \
+        REQUIRE_FALSE(result.diagnostics.empty());                          \
+        CHECK(result.diagnostics[0].message.find(text) != std::string::npos); \
+    } while (false)
+
 /** The value of `a = <literal>` holds this alternative of the Node variant. */
 #define CHECK_HOLDS(literal, Alternative)                                   \
     do {                                                                    \
@@ -459,6 +468,73 @@ TEST_CASE("Lexer errors become diagnostics", "[parser][error]") {
         INFO(trace("a = @", result));
         REQUIRE(result.diagnostics.size() == 1);
         CHECK(result.diagnostics[0].message.find('@') != std::string::npos);
+    }
+}
+
+TEST_CASE("Error messages", "[parser][error]") {
+    SECTION("they name the right closer") {
+        CHECK_MESSAGE_HAS("a = [1 2]", "']'");
+        CHECK_MESSAGE_HAS("a = { x = 1 y = 2 }", "'}'");
+        CHECK_MESSAGE_HAS("a = [", "']'");
+        CHECK_MESSAGE_HAS("a = {", "'}'");
+    }
+    SECTION("they name the offending token") {
+        CHECK_MESSAGE_HAS("port 8080", "'8080'");
+        CHECK_MESSAGE_HAS("= 1", "'='");
+    }
+    SECTION("end of file and end of line are spelled out") {
+        CHECK_MESSAGE_HAS("a =", "end of file");
+        CHECK_MESSAGE_HAS("a =\nb = 1", "end of line");
+        const ParseResult result = Parser("a =\r\nb = 1").parse();
+        INFO(trace("a =\r\nb = 1", result));
+        REQUIRE_FALSE(result.diagnostics.empty());
+        CHECK(result.diagnostics[0].message.find_first_of("\r\n") == std::string::npos);
+    }
+    SECTION("lexer errors keep their own message and the bad text") {
+        CHECK_MESSAGE_HAS("x = 1e5", "Invalid number");
+        CHECK_MESSAGE_HAS("x = 1e5", "1e5");
+        CHECK_MESSAGE_HAS(R"(s = "bad \q")", "Unknown escape sequence");
+        CHECK_MESSAGE_HAS(R"(s = "oops)", "Unterminated string");
+        CHECK_MESSAGE_HAS("@ = 1", "'@'");
+    }
+}
+
+TEST_CASE("Nesting limit", "[parser][error][nesting]") {
+    constexpr std::size_t limit = 256;
+    const auto arrays = [](std::size_t depth) {
+        return "a = " + std::string(depth, '[') + std::string(depth, ']');
+    };
+    const auto objects = [](std::size_t depth) {
+        std::string source = "a = ";
+        for (std::size_t i = 0; i < depth; i++) source += "{ a = ";
+        source += "1";
+        for (std::size_t i = 0; i < depth; i++) source += " }";
+        return source;
+    };
+
+    SECTION("the limit itself is fine") {
+        CHECK_TREE(arrays(limit), arrays(limit));
+        CHECK_TREE(objects(limit), objects(limit));
+    }
+    SECTION("one over is reported at the bracket that goes over") {
+        CHECK_ERROR_AT(arrays(limit + 1), 1, 5 + limit);
+        CHECK_ERROR_AT(objects(limit + 1), 1, 5 + limit * 6);
+        CHECK_MESSAGE_HAS(arrays(limit + 1), "256");
+    }
+    SECTION("arrays and objects count together") {
+        std::string source = "a = ";
+        for (std::size_t i = 0; i < limit; i++) source += "[{ a = ";
+        CHECK_ERROR_AT(source, 1, 5 + (limit / 2) * 7);
+    }
+    SECTION("far past the limit does not crash") {
+        CHECK_ERROR_AT(arrays(1'000'000), 1, 5 + limit);
+        CHECK_ERROR_AT("a = " + std::string(1'000'000, '['), 1, 5 + limit);
+    }
+    SECTION("parsing resumes on the next line") {
+        CHECK_RECOVERY(arrays(limit + 1) + "\nb = 1", "1:261", "b = 1");
+    }
+    SECTION("depth is back to zero for the next entry") {
+        CHECK_TREE(arrays(limit) + "\n" + arrays(limit), arrays(limit) + "\n" + arrays(limit));
     }
 }
 

@@ -8,7 +8,7 @@ UPPERCASE names are tokens produced by the lexer.
 
 A cord config is a list of `key = value` entries, one per line. Keys are flat: there are no
 sections or dotted paths. Values can be scalars, arrays or objects, and arrays and objects can
-nest freely. Whether a value has the right type is decided by the schema, not the grammar.
+nest. Whether a value has the right type is decided by the schema, not the grammar.
 
 ```
 # comments run to end of line
@@ -116,6 +116,8 @@ The grammar is LL(1): one token of lookahead always decides which rule applies.
 4. The grammar only checks shape. Types are checked against the schema at binding: nested
    arrays, mixed-type arrays or unexpected objects parse fine and fail only if the schema
    declares something else.
+5. Arrays and objects nest at most 256 levels deep. Going deeper is a syntax error, reported at
+   the bracket that goes over the limit.
 
 ## 3. Semantic rules
 
