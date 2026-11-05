@@ -209,7 +209,7 @@ private:
 
         if (!_isNumberJunk(_peek(idx))) return _createToken(type, idx);
         while (_isNumberJunk(_peek(idx))) idx++;
-        return _createToken(TokenType::Error, idx, "Invalid number: must be followed by a separator");
+        return _createToken(TokenType::Error, idx, "Invalid number");
     }
 
     // Can be a String or an Error
