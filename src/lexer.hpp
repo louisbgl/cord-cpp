@@ -52,13 +52,13 @@ public:
      * Once the end of the source is reached, every call returns Eof.
      */
     Token next() {
+        _skipCommentedLines();
         _skipWhitespaces();
         if (_lexed >= _source.length()) return _createToken(TokenType::Eof, 0);
 
+        if (_isValidFirstKeyChar(_peek())) return _getKeyToken();
+        if (_peek() == '-' || _isDigit(_peek())) return _getNumberToken();
         if (_peek() == '\"') return _getStringToken();
-
-        if (_source.substr(_lexed, 5) == "false") return _createToken(TokenType::Bool, 5);
-        if (_source.substr(_lexed, 4) == "true") return _createToken(TokenType::Bool, 4);
 
         if (_source.substr(_lexed, 2) == "\r\n") return _createToken(TokenType::Newline, 2);
         switch (_peek()) {
@@ -77,6 +77,7 @@ public:
 private:
     std::string_view _source;
     std::size_t _lexed = 0;
+    std::size_t _depth = 0; // brace or bracket depth
     std::size_t _line = 1;
     std::size_t _column = 1;
 
@@ -88,19 +89,22 @@ private:
             .column = _column,
             .message = msg,
         };
-        if (type == TokenType::String) _advance(size, false);
-        else _advance(size);
+        if (type == TokenType::LBracket) _depth++;
+        if (type == TokenType::LBrace)   _depth++;
+        if (type == TokenType::RBracket && _depth > 0) _depth--;
+        if (type == TokenType::RBrace   && _depth > 0) _depth--;
+        _advance(size);
         return t;
     }
 
-    char _peek(std::size_t count = 0) {
+    char _peek(std::size_t count = 0) const {
         if (_lexed + count >= _source.length()) return '\0';
         return _source.at(_lexed + count);
     }
 
-    void _advance(std::size_t count = 1, bool allow_line_change = true) {
+    void _advance(std::size_t count = 1) {
         while (count > 0) {
-            if (allow_line_change && _peek() == '\n') {
+            if (_peek() == '\n') {
                 _column = 1;
                 _line++;
             } else {
@@ -113,15 +117,31 @@ private:
     
     void _skipWhitespaces() {
         while (true) {
-            char c = _peek();
-            if (c == ' ' || c == '\t')
+            const char c = _peek();
+            if (c == ' ' || c == '\t') {
                 _advance();
-            else
+            } else if (_depth > 0 && _lexed < _source.length() && _isLineEnd()) {
+                _advance();
+                if (_peek() == '\n') _advance(); // newline was CRLF
+            } else {
                 break;
+            }
         }
     }
 
-    bool _isLineEnd(std::size_t offset) {
+    void _skipCommentedLines() {
+        while (true) {
+            _skipWhitespaces();
+            if (_peek() == '#') {
+                _advance();
+                while (!_isLineEnd()) _advance();
+            } else {
+                break;
+            }
+        }
+    }
+
+    bool _isLineEnd(std::size_t offset = 0) const {
         if (_lexed + offset >= _source.length()) return true;
         const char c = _peek(offset);
         return c == '\n' || (c == '\r' && _peek(offset + 1) == '\n');
@@ -131,6 +151,65 @@ private:
         return c == '"' || c == '\\' || c == 'n' || c == 't' || c == 'r';
     }
 
+    static bool _isLetter(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    }
+
+    static bool _isDigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+
+    std::size_t _countDigits(std::size_t offset = 0) const {
+        std::size_t count = 0;
+        while (_isDigit(_peek(count + offset))) count++;
+        return count;
+    }
+
+    static bool _isNumberJunk(char c) {
+        return _isLetter(c) || _isDigit(c) || c == '_' || c == '.';
+    }
+
+    static bool _isValidFirstKeyChar(char c) {
+        return _isLetter(c) || c == '_';
+    }
+    
+    static bool _isValidKeyChar(char c) {
+        return _isLetter(c) || _isDigit(c) || c == '_' || c == '-';
+    }
+
+    // Can be a Key or a Bool
+    Token _getKeyToken() {
+        std::size_t idx = 1; // skip past first char
+
+        while (_isValidKeyChar(_peek(idx))) idx++;
+        Token t = _createToken(TokenType::Key, idx);
+        if (t.lexeme == "true") t.type = TokenType::Bool;
+        if (t.lexeme == "false") t.type = TokenType::Bool;
+        return t;
+    }
+
+    // Can be an Int, a Float or an Error
+    Token _getNumberToken() {
+        std::size_t idx = _peek() == '-' ? 1 : 0;
+
+        std::size_t nbDigits = _countDigits(idx);
+        if (nbDigits == 0) return _createToken(TokenType::Error, idx, "Expected a digit after '-'");
+        idx += nbDigits;
+
+        TokenType type = TokenType::Int;
+        if (_peek(idx) == '.') {
+            nbDigits = _countDigits(++idx);
+            if (nbDigits == 0) return _createToken(TokenType::Error, idx, "Expected a digit after '.' in a number");
+            idx += nbDigits;
+            type = TokenType::Float;
+        }
+
+        if (!_isNumberJunk(_peek(idx))) return _createToken(type, idx);
+        while (_isNumberJunk(_peek(idx))) idx++;
+        return _createToken(TokenType::Error, idx, "Invalid number: must be followed by a separator");
+    }
+
+    // Can be a String or an Error
     Token _getStringToken() {
         std::string_view escapeError;
         std::size_t idx = 1; // skip past opening quote
@@ -148,13 +227,11 @@ private:
                 continue;
             }
 
-            // A backslash at the end of a line escapes nothing, the string is just unterminated.
             if (_isLineEnd(idx + 1)) {
                 idx++;
                 continue;
             }
 
-            // Consuming the pair is what makes `\"` not close the string and `\\"` close it.
             if (!_isEscapable(_peek(idx + 1)) && escapeError.empty()) escapeError = "Unknown escape sequence";
             idx += 2;
         }
