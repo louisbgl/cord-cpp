@@ -43,7 +43,10 @@ struct Token {
  */
 class Lexer {
 public:
-    explicit Lexer(std::string_view source) : _source(source) {}
+    explicit Lexer(std::string_view source) : _source(source) {
+        // Some Windows editors start files with a UTF-8 byte order mark.
+        if (_source.starts_with("\xEF\xBB\xBF")) _source.remove_prefix(3);
+    }
 
     /**
      * @brief Scans and returns the next token.
@@ -71,7 +74,7 @@ public:
             case ']': return _createToken(TokenType::RBracket, 1);
         }
         
-        return _createToken(TokenType::Error, 1, "Not implemented");
+        return _createToken(TokenType::Error, 1, "Unexpected character");
     }
 
 private:

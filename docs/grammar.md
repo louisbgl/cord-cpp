@@ -91,6 +91,8 @@ COMMENT    = "#" { ? any byte ? - NEWLINE } ;
    part of the string.
 7. String content is raw bytes: UTF-8 passes through unvalidated. Only the escapes listed in
    `escape` are recognized; any other `\x` is an error.
+8. A UTF-8 byte order mark (`EF BB BF`) at the very start of the content is skipped. Anywhere
+   else outside a string or comment, it is an error.
 
 ## 2. Syntax grammar
 

@@ -562,6 +562,16 @@ TEST_CASE("Odd bytes", "[lexer][bytes]") {
     SECTION("whitespace before a CRLF") {
         CHECK_TYPES("a \t\r\nb", Key, Newline, Key, Eof);
     }
+    SECTION("a UTF-8 BOM at the very start is skipped") {
+        CHECK_TYPES("\xEF\xBB\xBF" "a", Key, Eof);
+        CHECK_LEXEME("\xEF\xBB\xBF" "a", 0, "a");
+        CHECK_POSITION("\xEF\xBB\xBF" "a", 0, 1, 1);
+        CHECK_TYPES("\xEF\xBB\xBF", Eof);
+    }
+    SECTION("a UTF-8 BOM anywhere else is invalid") {
+        CHECK_ERROR("a \xEF\xBB\xBF");
+        CHECK_ERROR(" \xEF\xBB\xBF" "a");
+    }
 }
 
 TEST_CASE("LF and CRLF lex the same", "[lexer][integration]") {
