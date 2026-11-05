@@ -15,7 +15,7 @@ namespace cord {
 /**
  * @brief The parsed tree, and the problems found while building it.
  *
- * With an error, the tree only holds the entries parsed before it.
+ * With errors, the tree only holds the entries that parsed. It is not meant to be bound.
  */
 struct ParseResult {
     Object tree;
@@ -32,34 +32,24 @@ public:
     explicit Parser(std::string_view source) : _lexer(source), _current(_lexer.next()), _result{} {}
 
     /**
-     * @brief Parses the whole source, stopping at the first error.
+     * @brief Parses the whole source, resuming at the next line after an error.
+     *
+     * Stops if the entry right after a failed one fails too.
      */
     ParseResult parse() {
+        bool in_recovery = false;
         while (_current.type != TokenType::Eof) {
-            switch (_current.type) {
-                case TokenType::Newline: {
-                    _advance();
-                    break;
-                }
-                case TokenType::Key: {
-                    auto entry = _parseEntry();
-                    if (!entry) return std::move(_result);
-                    _result.tree.push_back(entry.value());
-                    if (_current.type != TokenType::Newline && _current.type != TokenType::Eof) {
-                        _pushDiagnostic("Expected a new line after a value, got: " + _describe(_current));
-                        return std::move(_result);
-                    }
-                    break;
-                }
-                case TokenType::Error: {
-                    _pushDiagnostic();
-                    return std::move(_result);
-                }
-                default: {
-                    _pushDiagnostic("Expected a key, got: " + _describe(_current));
-                    return std::move(_result);
-                }
+            if (_current.type == TokenType::Newline) {
+                _advance();
+                continue;
             }
+            if (_parseLine()) {
+                in_recovery = false;
+                continue;
+            }
+            if (in_recovery) break;
+            in_recovery = true;
+            _recover();
         }
 
         return std::move(_result);
@@ -74,37 +64,32 @@ private:
         _current = _lexer.next();
     }
 
-    [[nodiscard]] bool _expect(TokenType type, std::string expected) {
+    [[nodiscard]] bool _expect(TokenType type, std::string_view expected) {
         if (_current.type != type) {
-            _pushDiagnostic("Expected " + expected + ", got: " + _describe(_current));
+            _pushExpected(expected);
             return false;
         }
         _advance();
         return true;
     }
 
-    // msg overrides the tokens message if provided
-    void _pushDiagnostic(std::string msg = {}) {
-        if (msg.empty()) msg = std::string{_current.message};
+    void _pushDiagnostic(const Token& at, std::string message) {
         _result.diagnostics.push_back(Diagnostic {
             .severity = Severity::Error,
-            .line = _current.line,
-            .column = _current.column,
+            .line = at.line,
+            .column = at.column,
             .path = {},
-            .message = msg,
+            .message = std::move(message),
         });
     }
 
-    // msg overrides the tokens message if provided
-    void _pushDiagnostic(Token t, std::string msg = {}) {
-        if (msg.empty()) msg = std::string{t.message};
-        _result.diagnostics.push_back(Diagnostic {
-            .severity = Severity::Error,
-            .line = t.line,
-            .column = t.column,
-            .path = {},
-            .message = msg,
-        });
+    // A lexer error token already says what is wrong, more precisely than "expected".
+    void _pushExpected(std::string_view expected) {
+        if (_current.type == TokenType::Error) {
+            _pushDiagnostic(_current, std::string{_current.message} + ": " + _describe(_current));
+            return;
+        }
+        _pushDiagnostic(_current, "Expected " + std::string{expected} + ", got: " + _describe(_current));
     }
 
     static std::string _describe(const Token& token) {
@@ -136,110 +121,87 @@ private:
         return decoded;
     }
 
+    // seeks to the next Newline or Eof for best effort recovery
+    void _recover() {
+        while (_current.type != TokenType::Newline && _current.type != TokenType::Eof)
+            _advance();
+    }
+
+    // A valid entry stays in the tree even if garbage follows it, but the line still counts as failed.
+    bool _parseLine() {
+        auto entry = _parseEntry();
+        if (!entry) return false;
+        _result.tree.push_back(std::move(*entry));
+
+        if (_current.type == TokenType::Newline || _current.type == TokenType::Eof) return true;
+        _pushExpected("a new line after a value");
+        return false;
+    }
+
     std::optional<Entry> _parseEntry() {
         std::string_view key = _current.lexeme;
         if (!_expect(TokenType::Key, "a key")) return std::nullopt;
         if (!_expect(TokenType::Equals, "an equal sign ('=')")) return std::nullopt;
-        auto val = _parseValue();
-        if (val.has_value()) {
-            return Entry {
-                .key = std::string{key},
-                .value = val.value(),
-            };
-        }
-        return std::nullopt;
+
+        auto value = _parseValue();
+        if (!value) return std::nullopt;
+        return Entry {
+            .key = std::string{key},
+            .value = std::move(*value),
+        };
     }
 
     std::optional<Node> _parseValue() {
         Node node{};
         node.line = _current.line;
         node.column = _current.column;
-        
+
         switch (_current.type) {
-            case TokenType::Bool: {
-                node.value = Bool{(_current.lexeme == "true")};
-                _advance();
-                break;
-            }
-            case TokenType::Int: {
-                node.value = Int{std::string{_current.lexeme}};
-                _advance();
-                break;
-            }
-            case TokenType::Float: {
-                node.value = Float{std::string{_current.lexeme}};
-                _advance();
-                break;
-            }
-            case TokenType::String: {
-                node.value = String{_treatLexeme(_current.lexeme)};
-                _advance();
-                break;
-            }
-            case cord::TokenType::LBracket: {
-                auto val = _parseArray();
-                if (val.has_value()) {
-                    node.value = val.value();
-                    break;
-                } else {
-                    return std::nullopt;
-                }
-            }
-            case cord::TokenType::LBrace: {
-                auto val = _parseObject();
-                if (val.has_value()) {
-                    node.value = val.value();
-                    break;
-                } else {
-                    return std::nullopt;
-                }
-            }
-            case TokenType::Newline:
-            case TokenType::Eof: {
-                _pushDiagnostic("Expected a value after the equal sign ('=')");
+            case TokenType::Bool:   node.value = Bool{_current.lexeme == "true"}; break;
+            case TokenType::Int:    node.value = Int{std::string{_current.lexeme}}; break;
+            case TokenType::Float:  node.value = Float{std::string{_current.lexeme}}; break;
+            case TokenType::String: node.value = String{_treatLexeme(_current.lexeme)}; break;
+            case TokenType::LBracket: return _parseArray();
+            case TokenType::LBrace:   return _parseObject();
+            default:
+                _pushExpected("a value");
                 return std::nullopt;
-            }
-            default: {
-                _pushDiagnostic("Could not convert ` " + _describe(_current) + " ` to a value");
-                return std::nullopt;
-            }
         }
+        _advance();
         return node;
     }
 
-    std::optional<Array> _parseArray() {
+    std::optional<Node> _parseArray() {
         const Token opener = _current;
         _advance();
-        
+
         Array arr{};
         while (true) {
             if (_current.type == TokenType::RBracket) {
                 _advance();
-                return arr;
+                return Node{std::move(arr), opener.line, opener.column};
             }
             if (_current.type == TokenType::Eof) {
-                _pushDiagnostic(opener, "Reached end of file before a closing bracket (']')");
+                _pushDiagnostic(opener, "Reached end of file before a closing ']'");
                 break;
             }
-            
+
             auto value = _parseValue();
             if (!value) break;
-            arr.push_back(value.value());
+            arr.push_back(std::move(*value));
 
             if (_current.type == TokenType::Comma) {
                 _advance();
-            } else if (_current.type == TokenType::Eof || _current.type == TokenType::RBracket) {
-                continue;
-            } else {
-                _pushDiagnostic("Expected ',' or ']', got: " + _describe(_current));
+            } else if (_current.type != TokenType::RBracket && _current.type != TokenType::Eof) {
+                _pushExpected("',' or ']'");
                 break;
             }
         }
-        
+
         return std::nullopt;
     }
 
-    std::optional<Object> _parseObject() {
+    std::optional<Node> _parseObject() {
         const Token opener = _current;
         _advance();
 
@@ -247,23 +209,21 @@ private:
         while (true) {
             if (_current.type == TokenType::RBrace) {
                 _advance();
-                return obj;
+                return Node{std::move(obj), opener.line, opener.column};
             }
             if (_current.type == TokenType::Eof) {
-                _pushDiagnostic(opener, "Reached end of file before a closing brace ('}')");
+                _pushDiagnostic(opener, "Reached end of file before a closing '}'");
                 break;
             }
-            
+
             auto entry = _parseEntry();
             if (!entry) break;
-            obj.push_back(entry.value());
+            obj.push_back(std::move(*entry));
 
             if (_current.type == TokenType::Comma) {
                 _advance();
-            } else if (_current.type == TokenType::Eof || _current.type == TokenType::RBrace) {
-                continue;
-            } else {
-                _pushDiagnostic("Expected ',' or ']', got: " + _describe(_current));
+            } else if (_current.type != TokenType::RBrace && _current.type != TokenType::Eof) {
+                _pushExpected("',' or '}'");
                 break;
             }
         }

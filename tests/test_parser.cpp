@@ -97,6 +97,18 @@ std::string trace(std::string_view source, const ParseResult& result) {
     return text;
 }
 
+/**
+ * @brief Prints where each diagnostic is, in order: `1:5 2:5`.
+ */
+std::string positions(const std::vector<cord::Diagnostic>& diagnostics) {
+    std::string result;
+    for (const cord::Diagnostic& diagnostic : diagnostics) {
+        if (!result.empty()) result += ' ';
+        result += std::to_string(diagnostic.line) + ":" + std::to_string(diagnostic.column);
+    }
+    return result;
+}
+
 } // namespace
 
 // Macros, not functions: a failure must point at the test's line, not at a helper's.
@@ -122,6 +134,15 @@ std::string trace(std::string_view source, const ParseResult& result) {
         CHECK(diagnostic.column == (expected_column));                      \
         CHECK(diagnostic.path.empty());                                     \
         CHECK_FALSE(diagnostic.message.empty());                            \
+    } while (false)
+
+/** The source reports errors at exactly these positions, and keeps this printed tree. */
+#define CHECK_RECOVERY(source, expected_positions, expected_tree)           \
+    do {                                                                    \
+        const ParseResult result = Parser(source).parse();                  \
+        INFO(trace(source, result));                                        \
+        CHECK(positions(result.diagnostics) == (expected_positions));       \
+        CHECK(dump(result.tree) == (expected_tree));                        \
     } while (false)
 
 /** The value of `a = <literal>` holds this alternative of the Node variant. */
@@ -325,7 +346,7 @@ TEST_CASE("Rejected entries", "[parser][error]") {
     }
     SECTION("missing value") {
         CHECK_ERROR_AT("a =", 1, 4);
-        CHECK_ERROR_AT("a = \n1", 1, 5);
+        CHECK_ERROR_AT("a = \nb = 1", 1, 5);
     }
     SECTION("missing key") {
         CHECK_ERROR_AT("= 1", 1, 1);
@@ -441,22 +462,66 @@ TEST_CASE("Lexer errors become diagnostics", "[parser][error]") {
     }
 }
 
-TEST_CASE("Stopping at the first error", "[parser][error]") {
-    SECTION("only the first error is reported") {
-        CHECK_ERROR_AT("a = @\nb = @\nc = @", 1, 5);
-        CHECK_ERROR_AT("a b\nc d", 1, 3);
+TEST_CASE("Recovering at the next top-level line", "[parser][error][recovery]") {
+    SECTION("parsing resumes after the bad line, which is not in the tree") {
+        CHECK_RECOVERY("a = @\nb = 2", "1:5", "b = 2");
+        CHECK_RECOVERY("a = @\r\nb = 2", "1:5", "b = 2");
+        CHECK_RECOVERY("a = 1\n@\nb = 2", "2:1", "a = 1\nb = 2");
+        CHECK_RECOVERY("a b\nc = 1", "1:3", "c = 1");
+        CHECK_RECOVERY("a = 1\nb = [1, @]\nc = 3", "2:9", "a = 1\nc = 3");
     }
-    SECTION("the tree keeps the entries before the error") {
-        const ParseResult result = Parser("a = 1\nb = 2\n@\nc = 3").parse();
-        INFO(trace("a = 1\nb = 2\n@\nc = 3", result));
-        CHECK(result.diagnostics.size() == 1);
-        CHECK(dump(result.tree) == "a = 1\nb = 2");
+    SECTION("the rest of a bad line is skipped without more errors") {
+        CHECK_RECOVERY("a = @ @ @\nb = 2", "1:5", "b = 2");
+        CHECK_RECOVERY("= = =\nb = 2", "1:1", "b = 2");
     }
-    SECTION("a failed entry is not in the tree") {
-        const ParseResult result = Parser("a = 1\nb = [1, @]").parse();
-        INFO(trace("a = 1\nb = [1, @]", result));
-        CHECK(result.diagnostics.size() == 1);
-        CHECK(dump(result.tree) == "a = 1");
+    SECTION("a valid entry stays when garbage follows it on its line") {
+        CHECK_RECOVERY("a = 1 b = 2\nc = 3", "1:7", "a = 1\nc = 3");
+        CHECK_RECOVERY("a = [1] @ @\nc = 3", "1:9", "a = [1]\nc = 3");
+    }
+    SECTION("a bad line at the end") {
+        CHECK_RECOVERY("a = 1\nb = @", "2:5", "a = 1");
+        CHECK_RECOVERY("a = 1\nb = @\n", "2:5", "a = 1");
+    }
+    SECTION("newlines inside closed brackets do not end the skip") {
+        CHECK_RECOVERY("a = [\n  1, @,\n  2,\n]\nb = 3", "2:6", "b = 3");
+        CHECK_RECOVERY("a = {\n  x = @,\n  y = 2,\n}\nb = 3", "2:7", "b = 3");
+        CHECK_RECOVERY("a = [[@], [2]]\nb = 3", "1:7", "b = 3");
+    }
+    SECTION("stray and wrong closers do not hide the next line") {
+        CHECK_RECOVERY("]\nb = 1", "1:1", "b = 1");
+        CHECK_RECOVERY("a = ]\nb = 1", "1:5", "b = 1");
+        CHECK_RECOVERY("a = [1}\nb = 1", "1:7", "b = 1");
+    }
+    SECTION("an unterminated string only costs its own line") {
+        CHECK_RECOVERY("a = \"oops\nb = 1", "1:5", "b = 1");
+    }
+}
+
+TEST_CASE("Stopping after two bad entries in a row", "[parser][error][recovery]") {
+    SECTION("the second error is reported, then nothing else is parsed") {
+        CHECK_RECOVERY("a = @\nb = @\nc = @", "1:5 2:5", "");
+        CHECK_RECOVERY("a = @\nb = @\nc = 1", "1:5 2:5", "");
+        CHECK_RECOVERY("a b\nc d\ne = 1", "1:3 2:3", "");
+        CHECK_RECOVERY("a = \n1", "1:5 2:1", "");
+    }
+    SECTION("the tree keeps the entries before them") {
+        CHECK_RECOVERY("a = 1\nb = @\nc = @\nd = 2", "2:5 3:5", "a = 1");
+    }
+    SECTION("blank and comment lines do not separate them") {
+        CHECK_RECOVERY("a = @\n\n# comment\nb = @\nc = 1", "1:5 4:5", "");
+    }
+    SECTION("a good entry in between resets the count") {
+        CHECK_RECOVERY("a = @\nb = 1\nc = @\nd = 2\ne = @", "1:5 3:5 5:5", "b = 1\nd = 2");
+        CHECK_RECOVERY("a = @\nb = 1\nc = @\nd = @\ne = 2", "1:5 3:5 4:5", "b = 1");
+    }
+}
+
+TEST_CASE("Unclosed brackets swallow the rest", "[parser][error][recovery]") {
+    SECTION("one error at the opening, entries before it are kept") {
+        CHECK_RECOVERY("x = 1\na = [1,\n2,\n", "2:5", "x = 1");
+    }
+    SECTION("a bad element inside one reports nothing further") {
+        CHECK_RECOVERY("a = [@\nb = 2\nc = 3", "1:6", "");
     }
 }
 
