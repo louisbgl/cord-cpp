@@ -11,6 +11,17 @@
 
 namespace cord {
 
+template <class T>
+class Struct; // defined in struct.hpp
+
+/**
+ * @brief A struct with a `describe(cord::Struct<T>&)` that cord can find.
+ *
+ * The class check comes first: `Struct<int>` can't even be instantiated, which would be a hard error.
+ */
+template <class T>
+concept Describable = std::is_class_v<T> && requires(Struct<T>& s) { describe(s); };
+
 /**
  * @brief Converts one value of type T from a tree node. Knows nothing about keys.
  *
@@ -91,6 +102,20 @@ struct Converter<std::string> {
         if (!value) { ctx.error(node, "Expected a string"); return false; }
         out = value->value;
         return true;
+    }
+};
+
+template <Describable T>
+struct Converter<T> {
+    static bool read(const Node& node, T& out, Context& ctx) {
+        const auto* object = std::get_if<Object>(&node.value);
+        if (!object) { ctx.error(node, "Expected an object"); return false; }
+        static const Struct<T> description = [] {
+            Struct<T> s;
+            describe(s);
+            return s;
+        }();
+        return description.read(*object, out, ctx);
     }
 };
 

@@ -1,7 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,6 +11,8 @@
 #include "test_helpers.hpp"
 
 using cord::Context;
+using cord::Converter;
+using cord::Node;
 using cord::Parser;
 using cord::Struct;
 
@@ -46,6 +47,55 @@ void describe(Struct<Config>& s) {
 struct Empty {};
 
 void describe(Struct<Empty>&) {}
+
+struct Pos {
+    double x = 0.5;
+    double y = 0.5;
+};
+
+void describe(Struct<Pos>& s) {
+    s.add("x", &Pos::x);
+    s.add("y", &Pos::y);
+}
+
+struct Player {
+    std::string name = "nobody";
+    Pos pos;
+    int hp = 100;
+};
+
+void describe(Struct<Player>& s) {
+    s.add("name", &Player::name);
+    s.add("pos", &Player::pos);
+    s.add("hp", &Player::hp);
+}
+
+struct World {
+    Player player;
+    Pos origin;
+    Pos spawn;
+};
+
+void describe(Struct<World>& s) {
+    s.add("player", &World::player);
+    s.add("origin", &World::origin);
+    s.add("spawn", &World::spawn);
+}
+
+struct Counted {
+    int a = 0;
+};
+
+int counted_describes = 0;
+
+void describe(Struct<Counted>& s) {
+    counted_describes++;
+    s.add("a", &Counted::a);
+}
+
+struct Undescribed {
+    int a = 0;
+};
 
 template <class T>
 struct Bound {
@@ -116,8 +166,6 @@ TEST_CASE("Keys and member types", "[struct]") {
     STATIC_CHECK(CanAdd<Pair, std::string>);
     STATIC_CHECK(CanAdd<Pair, double>);
     STATIC_CHECK(CanAdd<Pair, bool>);
-    STATIC_CHECK_FALSE(CanAdd<Pair, char>);
-    STATIC_CHECK_FALSE(CanAdd<Pair, std::map<std::string, int>>);
 }
 
 TEST_CASE("Present keys", "[struct][present]") {
@@ -206,6 +254,106 @@ TEST_CASE("Bad values", "[struct][bad]") {
     SECTION("warnings are reported along with errors") {
         BIND(Pair, "a = \"not an int\"\nc = 1", false, "error 1:5 a", "warning 0:0 b", "warning 2:5 c");
     }
+}
+
+TEST_CASE("Which structs can be converted", "[struct][nested]") {
+    STATIC_CHECK(cord::Convertible<Pos>);
+    STATIC_CHECK(cord::Convertible<Player>);
+    STATIC_CHECK(CanAdd<World, Player>);
+    STATIC_CHECK_FALSE(cord::Convertible<Undescribed>);
+    STATIC_CHECK_FALSE(cord::Describable<int>);
+    STATIC_CHECK_FALSE(cord::Describable<double>);
+    STATIC_CHECK_FALSE(cord::Describable<Undescribed>);
+}
+
+TEST_CASE("Nested structs", "[struct][nested]") {
+    SECTION("values reach the inner members") {
+        BIND(Player, "name = \"bob\"\npos = { x = 1.5, y = 2.5 }\nhp = 5", true);
+        CHECK(bound.out.name == "bob");
+        CHECK(bound.out.pos.x == 1.5);
+        CHECK(bound.out.pos.y == 2.5);
+        CHECK(bound.out.hp == 5);
+    }
+    SECTION("over several lines") {
+        BIND(Player, "name = \"bob\"\npos = {\n  x = 1.5,\n  y = 2.5,\n}\nhp = 5", true);
+        CHECK(bound.out.pos.y == 2.5);
+    }
+    SECTION("several levels") {
+        BIND(World, "player = { name = \"bob\", pos = { x = 1.5, y = 2.5 }, hp = 5 }\n"
+                    "origin = { x = 3.5, y = 4.5 }\nspawn = { x = 5.5, y = 6.5 }", true);
+        CHECK(bound.out.player.name == "bob");
+        CHECK(bound.out.player.pos.y == 2.5);
+    }
+    SECTION("two members of the same struct type stay separate") {
+        BIND(World, "player = { name = \"bob\", pos = { x = 1.5, y = 2.5 }, hp = 5 }\n"
+                    "origin = { x = 3.5, y = 4.5 }\nspawn = { x = 5.5, y = 6.5 }", true);
+        CHECK(bound.out.origin.x == 3.5);
+        CHECK(bound.out.spawn.x == 5.5);
+    }
+}
+
+TEST_CASE("Nested structs report like the top level", "[struct][nested]") {
+    SECTION("a bad value has the full path") {
+        BIND(Player, "name = \"bob\"\npos = { x = \"oops\", y = 2.5 }\nhp = 5", false, "error 2:13 pos.x");
+    }
+    SECTION("through several levels") {
+        BIND(World, "player = { name = \"bob\", pos = { x = 1.5, y = true }, hp = 5 }\n"
+                    "origin = { x = 3.5, y = 4.5 }\nspawn = { x = 5.5, y = 6.5 }", false, "error 1:47 player.pos.y");
+    }
+    SECTION("the other values are still read") {
+        BIND(Player, "name = \"bob\"\npos = { x = \"oops\", y = 2.5 }\nhp = 5", false, "error 2:13 pos.x");
+        CHECK(bound.out.pos.y == 2.5);
+        CHECK(bound.out.hp == 5);
+    }
+    SECTION("an absent inner key warns, and keeps its initializer") {
+        BIND(Player, "name = \"bob\"\npos = { x = 1.5 }\nhp = 5", true, "warning 0:0 pos.y");
+        CHECK(bound.out.pos.x == 1.5);
+        CHECK(bound.out.pos.y == 0.5);
+    }
+    SECTION("an absent object warns once, not once per inner key") {
+        BIND(Player, "name = \"bob\"\nhp = 5", true, "warning 0:0 pos");
+        CHECK(bound.out.pos.x == 0.5);
+    }
+    SECTION("an unknown inner key warns") {
+        BIND(Player, "name = \"bob\"\npos = { x = 1.5, y = 2.5, z = 3.5 }\nhp = 5", true, "warning 2:31 pos.z");
+    }
+    SECTION("a duplicate inner key warns, and the last one wins") {
+        BIND(Player, "name = \"bob\"\npos = { x = 1.5, x = 2.5, y = 3.5 }\nhp = 5", true, "warning 2:22 pos.x");
+        CHECK(bound.out.pos.x == 2.5);
+    }
+    SECTION("an empty object warns for each key") {
+        BIND(Player, "name = \"bob\"\npos = {}\nhp = 5", true, "warning 0:0 pos.x", "warning 0:0 pos.y");
+    }
+}
+
+TEST_CASE("A struct member needs an object", "[struct][nested]") {
+    SECTION("anything else is refused at the value") {
+        BIND(Player, "name = \"bob\"\npos = 1\nhp = 5", false, "error 2:7 pos");
+    }
+    SECTION("an array is not an object") {
+        BIND(Player, "name = \"bob\"\npos = [1.5, 2.5]\nhp = 5", false, "error 2:7 pos");
+    }
+    SECTION("nothing inside it gets reported") {
+        BIND(Player, "name = \"bob\"\npos = \"nope\"\nhp = 5", false, "error 2:7 pos");
+        CHECK(bound.out.hp == 5);
+    }
+}
+
+TEST_CASE("describe() runs once per type", "[struct][nested]") {
+    const cord::ParseResult parsed = Parser("a = 1").parse();
+    REQUIRE(parsed.tree.size() == 1);
+    const Node& node = parsed.tree[0].value;
+
+    const cord::ParseResult object = Parser("o = { a = 1 }").parse();
+    REQUIRE(object.tree.size() == 1);
+
+    Context ctx;
+    Counted out;
+    CHECK(Converter<Counted>::read(object.tree[0].value, out, ctx));
+    CHECK(Converter<Counted>::read(object.tree[0].value, out, ctx));
+    CHECK_FALSE(Converter<Counted>::read(node, out, ctx));
+    CHECK(out.a == 1);
+    CHECK(counted_describes == 1);
 }
 
 TEST_CASE("Paths", "[struct][path]") {

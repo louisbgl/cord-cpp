@@ -11,6 +11,13 @@
 #include "converter.hpp"
 #include "node.hpp"
 
+// Makes a static_assert message stand out in the compiler's output. Takes a string literal.
+#define CORD_COMPILE_ERROR(message)                                                         \
+    "\n\n"                                                                                  \
+    "===================================== CORD =====================================\n"    \
+    message "\n"                                                                            \
+    "================================================================================\n"
+
 namespace cord {
 
 /**
@@ -49,12 +56,22 @@ public:
     /**
      * @brief Binds a key to a member. An unsupported member type is a compile error.
      */
-    template <Convertible M>
+    template <class M>
     void add(std::string_view key, M T::* field) {
-        auto member = std::make_unique<Member<T, M>>();
-        member->key = key;
-        member->field = field;
-        _members.push_back(std::move(member));
+        // A plain bool, or compilers follow the message with a long explanation of the concept.
+        constexpr bool convertible = Convertible<M>;
+        static_assert(convertible, CORD_COMPILE_ERROR(
+            "This member's type can't be read.\n"
+            "For a struct, declare its describe(cord::Struct<T>&) before using it.\n"
+            "Other supported types: bool, integers, floats, std::string, std::vector, std::optional."));
+
+        // Keeps a bad type from adding more errors after the one above.
+        if constexpr (convertible) {
+            auto member = std::make_unique<Member<T, M>>();
+            member->key = key;
+            member->field = field;
+            _members.push_back(std::move(member));
+        }
     }
 
     /**
