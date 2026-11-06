@@ -26,6 +26,10 @@ include(CTest)
 include(Catch)
 catch_discover_tests(cord_tests)
 
+# Manual playground, not part of the test suite
+add_executable(playground playground.cpp)
+target_link_libraries(playground PRIVATE cord)
+
 # Compile-fail tests: verify unsupported types are rejected at compile time
 set(COMPILE_FAIL_TESTS)
 

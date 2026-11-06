@@ -16,25 +16,7 @@ using enum cord::TokenType;
 
 template <>
 struct Catch::StringMaker<TokenType> {
-    static std::string convert(TokenType type) {
-        switch (type) {
-            case Key: return "Key";
-            case Bool: return "Bool";
-            case Int: return "Int";
-            case Float: return "Float";
-            case String: return "String";
-            case Equals: return "Equals";
-            case Comma: return "Comma";
-            case LBracket: return "LBracket";
-            case RBracket: return "RBracket";
-            case LBrace: return "LBrace";
-            case RBrace: return "RBrace";
-            case Newline: return "Newline";
-            case Eof: return "Eof";
-            case Error: return "Error";
-        }
-        return "?";
-    }
+    static std::string convert(TokenType type) { return tokenName(type); }
 };
 
 namespace {

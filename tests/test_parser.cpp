@@ -5,7 +5,6 @@
 #include <string_view>
 #include <variant>
 
-#include "overloaded.hpp"
 #include "parser.hpp"
 #include "test_helpers.hpp"
 
@@ -21,69 +20,6 @@ using cord::Parser;
 using cord::String;
 
 namespace {
-
-/**
- * @brief Prints text as a string literal, so a decoded newline stays on one line.
- */
-std::string dump_string(std::string_view text) {
-    std::string result = "\"";
-    for (const char c : text) {
-        switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\n': result += "\\n"; break;
-            case '\t': result += "\\t"; break;
-            case '\r': result += "\\r"; break;
-            default: result += c;
-        }
-    }
-    return result + "\"";
-}
-
-std::string dump(const Node& node);
-
-/**
- * @brief Prints entries as `key = value`, joined by the separator.
- */
-std::string dump_entries(const Object& entries, std::string_view separator) {
-    std::string result;
-    for (std::size_t i = 0; i < entries.size(); i++) {
-        if (i > 0) result += separator;
-        result += entries[i].key + " = " + dump(entries[i].value);
-    }
-    return result;
-}
-
-/**
- * @brief Prints a node in a normalized form: `[1, 2]`, `{ a = 1, b = 2 }`, `[]`, `{}`.
- */
-std::string dump(const Node& node) {
-    return std::visit(cord::overloaded{
-        [](const Bool& value) -> std::string { return value.value ? "true" : "false"; },
-        [](const Int& value) -> std::string { return value.text; },
-        [](const Float& value) -> std::string { return value.text; },
-        [](const String& value) -> std::string { return dump_string(value.value); },
-        [](const Array& elements) -> std::string {
-            std::string result = "[";
-            for (std::size_t i = 0; i < elements.size(); i++) {
-                if (i > 0) result += ", ";
-                result += dump(elements[i]);
-            }
-            return result + "]";
-        },
-        [](const Object& entries) -> std::string {
-            if (entries.empty()) return "{}";
-            return "{ " + dump_entries(entries, ", ") + " }";
-        },
-    }, node.value);
-}
-
-/**
- * @brief Prints a whole tree, one top-level entry per line.
- */
-std::string dump(const Object& tree) {
-    return dump_entries(tree, "\n");
-}
 
 /**
  * @brief Describes a source and what the parser made of it, printed with every failure.
