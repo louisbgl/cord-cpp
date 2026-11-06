@@ -29,6 +29,11 @@ struct Server {
     bool verbose = false;
 };
 
+struct Meta {
+    Server server{};
+    bool something = true;
+};
+
 void describe(cord::Struct<Server>& s) {
     s.add("name", &Server::name);
     s.add("port", &Server::port);
@@ -36,9 +41,20 @@ void describe(cord::Struct<Server>& s) {
     s.add("verbose", &Server::verbose);
 }
 
+void describe(cord::Struct<Meta>& s) {
+    s.add("server", &Meta::server);
+    s.add("something", &Meta::something);
+}
+
 void printValue(const Server& server) {
     std::cout << "  name=" << server.name << " port=" << server.port << " ratio=" << server.ratio
               << " verbose=" << std::boolalpha << server.verbose << "\n";
+}
+
+void printValue(const Meta& meta) {
+    std::cout << "Meta:\n";
+    printValue(meta.server);
+    std::cout << "  something=" << std::boolalpha << meta.something << "\n";
 }
 
 constexpr std::string_view source = R"(name = "cord"
@@ -138,6 +154,8 @@ void scratch() {
     tryStruct<Server>("port = 1\nextra = 2");
     tryStruct<Server>("port = 1\nport = 2");
     tryStruct<Server>("port = \"not an int\"\nname = \"still read\"");
+    std::cout << "\n================\n\n";
+    tryStruct<Meta>("server = { name = \"cord\", port = 1, ratio = 2.5, verbose = false }\nsomething = false");
 }
 
 } // namespace
