@@ -17,9 +17,29 @@
 #include "converter.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "struct.hpp"
 #include "test_helpers.hpp"
 
 namespace {
+
+struct Server {
+    std::string name = "default";
+    int port = 8080;
+    double ratio = 0.5;
+    bool verbose = false;
+};
+
+void describe(cord::Struct<Server>& s) {
+    s.add("name", &Server::name);
+    s.add("port", &Server::port);
+    s.add("ratio", &Server::ratio);
+    s.add("verbose", &Server::verbose);
+}
+
+void printValue(const Server& server) {
+    std::cout << "  name=" << server.name << " port=" << server.port << " ratio=" << server.ratio
+              << " verbose=" << std::boolalpha << server.verbose << "\n";
+}
 
 constexpr std::string_view source = R"(name = "cord"
 port = 8080
@@ -85,15 +105,39 @@ void tryRead(std::string_view literal) {
 }
 
 /**
+ * @brief Runs Struct<T>::read on a whole config and prints the result. T needs a printValue().
+ */
+template <class T>
+void tryStruct(std::string_view text) {
+    std::cout << show(text) << "\n";
+
+    const cord::ParseResult parsed = cord::Parser(text).parse();
+    if (!parsed.diagnostics.empty()) {
+        std::cout << "  did not parse\n";
+        printDiagnostics(parsed.diagnostics);
+        return;
+    }
+
+    cord::Struct<T> description;
+    describe(description);
+
+    cord::Context ctx;
+    T out{};
+    const bool ok = description.read(parsed.tree, out, ctx);
+    std::cout << "  read returned " << std::boolalpha << ok << "\n";
+    printValue(out);
+    printDiagnostics(ctx.diagnostics());
+}
+
+/**
  * @brief Free space: whatever is being tried right now goes here.
  */
 void scratch() {
-    tryRead<bool>("true");
-    tryRead<std::string>(R"("hello\nworld")");
-    tryRead<bool>("1");
-    tryRead<int>("8080");
-    tryRead<std::uint8_t>("256");
-    tryRead<double>("1");
+    tryStruct<Server>("name = \"cord\"\nport = 1\nratio = 2.5\nverbose = true");
+    tryStruct<Server>("port = 1");
+    tryStruct<Server>("port = 1\nextra = 2");
+    tryStruct<Server>("port = 1\nport = 2");
+    tryStruct<Server>("port = \"not an int\"\nname = \"still read\"");
 }
 
 } // namespace

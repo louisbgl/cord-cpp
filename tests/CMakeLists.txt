@@ -31,6 +31,10 @@ catch_discover_tests(cord_tests)
 add_executable(playground playground.cpp)
 target_link_libraries(playground PRIVATE cord)
 
+# Every user-facing message in one place, to read and judge them
+add_executable(error_gallery error_gallery.cpp)
+target_link_libraries(error_gallery PRIVATE cord)
+
 # Compile-fail tests: verify unsupported types are rejected at compile time
 set(COMPILE_FAIL_TESTS)
 
