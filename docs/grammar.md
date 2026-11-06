@@ -164,7 +164,7 @@ A value that violates a constraint declared in the schema (`min`, `max`, `oneOf`
 4. An object must match the declared struct: its keys follow the same key rules as top-level
    entries (duplicates and unknown keys warn), its values the same type rules.
 5. A number that does not fit the declared type is an error (`port = 99999999999` for a 32-bit
-   int field). Float literals too large for the type (out of range, not precision loss) are an
-   error too.
+   int field). Float literals too large or too small for the type (out of range, not precision
+   loss) are an error too.
 6. NaN and infinity are not representable: there is no literal for them, and writing a struct
    holding one is an error.

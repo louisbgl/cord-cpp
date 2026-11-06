@@ -11,6 +11,7 @@ FetchContent_MakeAvailable(Catch2)
 set(TEST_SOURCES
     test_lexer.cpp
     test_parser.cpp
+    test_converter.cpp
 )
 
 add_executable(cord_tests ${TEST_SOURCES})
