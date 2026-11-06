@@ -12,6 +12,7 @@ set(TEST_SOURCES
     test_lexer.cpp
     test_parser.cpp
     test_converter.cpp
+    test_struct.cpp
 )
 
 add_executable(cord_tests ${TEST_SOURCES})
