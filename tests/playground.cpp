@@ -6,11 +6,13 @@
 #include <concepts>
 #include <cstddef>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <optional>
 
 #include "context.hpp"
 #include "converter.hpp"
@@ -37,6 +39,10 @@ struct TestVec {
     std::vector<bool> booleans = {true, false, true, true};
 };
 
+struct TestOptional {
+    std::optional<std::string> opt = std::nullopt;
+};
+
 void describe(cord::Struct<Server>& s) {
     s.add("name", &Server::name);
     s.add("port", &Server::port);
@@ -51,6 +57,10 @@ void describe(cord::Struct<Meta>& s) {
 
 void describe(cord::Struct<TestVec>& s) {
     s.add("booleans", &TestVec::booleans);
+}
+
+void describe(cord::Struct<TestOptional>& s) {
+    s.add("opt", &TestOptional::opt);
 }
 
 void printValue(const Server& server) {
@@ -71,6 +81,13 @@ void printValue(const TestVec& vec) {
         std::cout << vec.booleans[i];
     }
     std::cout << "] (" << vec.booleans.size() << " elements)\n";
+}
+
+void printValue(const TestOptional& opt) {
+    if (opt.opt)
+        std::cout << "TestOptional: '" << opt.opt.value() << "'\n";
+    else
+        std::cout << "TestOptional: nullopt";
 }
 
 constexpr std::string_view source = R"(name = "cord"
@@ -171,12 +188,18 @@ void scratch() {
     tryStruct<Server>("port = 1\nport = 2");
     tryStruct<Server>("port = \"not an int\"\nname = \"still read\"");
     std::cout << "\n================\n\n";
+    
     tryStruct<Meta>("server = { name = \"cord\", port = 1, ratio = 2.5, verbose = false }\nsomething = false");
     std::cout << "\n================\n\n";
+    
     tryStruct<TestVec>("booleans = [false, false, true, false]");
     tryStruct<TestVec>("booleans = [false, false, true, false, \"not a boolean\", true]");
     tryStruct<TestVec>("booleans = []");
-    tryStruct<TestVec>("");
+    tryStruct<TestVec>("# empty source");
+    std::cout << "\n================\n\n";
+
+    tryStruct<TestOptional>("opt = \"this sting is optional\"");
+    tryStruct<TestOptional>("# empty source");
 }
 
 } // namespace
