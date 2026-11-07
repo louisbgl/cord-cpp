@@ -5,7 +5,6 @@
 
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -34,6 +33,10 @@ struct Meta {
     bool something = true;
 };
 
+struct TestVec {
+    std::vector<bool> booleans = {true, false, true, true};
+};
+
 void describe(cord::Struct<Server>& s) {
     s.add("name", &Server::name);
     s.add("port", &Server::port);
@@ -46,6 +49,10 @@ void describe(cord::Struct<Meta>& s) {
     s.add("something", &Meta::something);
 }
 
+void describe(cord::Struct<TestVec>& s) {
+    s.add("booleans", &TestVec::booleans);
+}
+
 void printValue(const Server& server) {
     std::cout << "  name=" << server.name << " port=" << server.port << " ratio=" << server.ratio
               << " verbose=" << std::boolalpha << server.verbose << "\n";
@@ -55,6 +62,15 @@ void printValue(const Meta& meta) {
     std::cout << "Meta:\n";
     printValue(meta.server);
     std::cout << "  something=" << std::boolalpha << meta.something << "\n";
+}
+
+void printValue(const TestVec& vec) {
+    std::cout << "  booleans = [" << std::boolalpha;
+    for (std::size_t i = 0; i < vec.booleans.size(); i++) {
+        if (i > 0) std::cout << ", ";
+        std::cout << vec.booleans[i];
+    }
+    std::cout << "] (" << vec.booleans.size() << " elements)\n";
 }
 
 constexpr std::string_view source = R"(name = "cord"
@@ -156,6 +172,11 @@ void scratch() {
     tryStruct<Server>("port = \"not an int\"\nname = \"still read\"");
     std::cout << "\n================\n\n";
     tryStruct<Meta>("server = { name = \"cord\", port = 1, ratio = 2.5, verbose = false }\nsomething = false");
+    std::cout << "\n================\n\n";
+    tryStruct<TestVec>("booleans = [false, false, true, false]");
+    tryStruct<TestVec>("booleans = [false, false, true, false, \"not a boolean\", true]");
+    tryStruct<TestVec>("booleans = []");
+    tryStruct<TestVec>("");
 }
 
 } // namespace
