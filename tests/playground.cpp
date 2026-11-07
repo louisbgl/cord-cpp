@@ -87,7 +87,7 @@ void printValue(const TestOptional& opt) {
     if (opt.opt)
         std::cout << "TestOptional: '" << opt.opt.value() << "'\n";
     else
-        std::cout << "TestOptional: nullopt";
+        std::cout << "TestOptional: nullopt\n";
 }
 
 constexpr std::string_view source = R"(name = "cord"
