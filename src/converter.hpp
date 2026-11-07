@@ -110,17 +110,25 @@ struct Converter<std::string> {
     }
 };
 
+/**
+ * @brief T's description, built by its describe() on the first call only, then shared.
+ */
+template <Describable T>
+const Struct<T>& description() {
+    static const Struct<T> cached = [] {
+        Struct<T> s;
+        describe(s);
+        return s;
+    }();
+    return cached;
+}
+
 template <Describable T>
 struct Converter<T> {
     static bool read(const Node& node, T& out, Context& ctx) {
         const auto* object = std::get_if<Object>(&node.value);
         if (!object) { ctx.error(node, "Expected an object"); return false; }
-        static const Struct<T> description = [] {
-            Struct<T> s;
-            describe(s);
-            return s;
-        }();
-        return description.read(*object, out, ctx);
+        return description<T>().read(*object, out, ctx);
     }
 };
 
