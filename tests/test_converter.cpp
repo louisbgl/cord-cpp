@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -440,5 +441,44 @@ TEST_CASE("Vector paths", "[converter][vector][path]") {
     }
     SECTION("the path is left as it was found") {
         CHECK(ctx.path() == "tags");
+    }
+}
+
+TEST_CASE("Which optionals can be converted", "[converter][optional]") {
+    STATIC_CHECK(cord::Convertible<std::optional<int>>);
+    STATIC_CHECK(cord::Convertible<std::optional<std::string>>);
+    STATIC_CHECK(cord::Convertible<std::optional<std::vector<int>>>);
+    STATIC_CHECK(cord::Convertible<std::vector<std::optional<int>>>);
+
+    STATIC_CHECK_FALSE(cord::Convertible<std::optional<char>>);
+    STATIC_CHECK_FALSE(cord::Convertible<std::optional<std::map<std::string, int>>>);
+}
+
+TEST_CASE("Optionals", "[converter][optional]") {
+    SECTION("a value fills it") {
+        CHECK_READS(std::optional<int>, "8080", std::optional<int>{8080});
+        CHECK_READS(std::optional<bool>, "false", std::optional<bool>{false});
+        CHECK_READS(std::optional<std::string>, R"("motd")", std::optional<std::string>{"motd"});
+        CHECK_READS(std::optional<double>, "1", std::optional<double>{1.0});
+    }
+    SECTION("around a vector") {
+        CHECK_READS(std::optional<std::vector<int>>, "[1, 2]", (std::optional<std::vector<int>>{{1, 2}}));
+        CHECK_READS(std::optional<std::vector<int>>, "[]", (std::optional<std::vector<int>>{std::vector<int>{}}));
+    }
+    SECTION("an existing value is replaced") {
+        const Node node = parseValue("6");
+        Context ctx;
+        std::optional<int> out = 5;
+        REQUIRE(Converter<std::optional<int>>::read(node, out, ctx));
+        CHECK(out == 6);
+    }
+    SECTION("a bad value is an error, not an empty optional") {
+        CHECK_REJECTS(std::optional<int>, R"("8080")");
+        CHECK_REJECTS(std::optional<int>, "99999999999");
+        CHECK_REJECTS(std::optional<std::string>, "1");
+        CHECK_REJECTS(std::optional<std::vector<int>>, "1");
+    }
+    SECTION("errors inside it keep their path") {
+        CHECK_ERRORS(std::optional<std::vector<int>>, R"([1, "x"])", "1:9 [1]");
     }
 }

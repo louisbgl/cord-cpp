@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -56,6 +57,22 @@ struct Pos {
 void describe(Struct<Pos>& s) {
     s.add("x", &Pos::x);
     s.add("y", &Pos::y);
+}
+
+struct Optionals {
+    std::optional<std::string> motd;
+    std::optional<int> port;
+    std::optional<int> workers = 4;
+    std::optional<Pos> pos;
+    int plain = 1;
+};
+
+void describe(Struct<Optionals>& s) {
+    s.add("motd", &Optionals::motd);
+    s.add("port", &Optionals::port);
+    s.add("workers", &Optionals::workers);
+    s.add("pos", &Optionals::pos);
+    s.add("plain", &Optionals::plain);
 }
 
 struct Route {
@@ -371,6 +388,45 @@ TEST_CASE("Vectors of structs", "[struct][nested][vector]") {
     }
     SECTION("an element that is not an object") {
         BIND(Route, "points = [1]", false, "error 1:11 points[0]");
+    }
+}
+
+TEST_CASE("Optional members", "[struct][optional]") {
+    SECTION("absent, they stay silent and empty") {
+        BIND(Optionals, "plain = 2", true);
+        CHECK_FALSE(bound.out.motd.has_value());
+        CHECK_FALSE(bound.out.port.has_value());
+        CHECK_FALSE(bound.out.pos.has_value());
+    }
+    SECTION("absent, an initializer is kept like for any member") {
+        BIND(Optionals, "plain = 2", true);
+        CHECK(bound.out.workers == 4);
+    }
+    SECTION("only plain members warn when absent") {
+        BIND(Optionals, "", true, "warning 0:0 plain");
+    }
+    SECTION("present, they hold the value") {
+        BIND(Optionals, "motd = \"hi\"\nport = 80\nworkers = 8\npos = { x = 1.5, y = 2.5 }\nplain = 2", true);
+        CHECK(bound.out.motd == "hi");
+        CHECK(bound.out.port == 80);
+        CHECK(bound.out.workers == 8);
+        REQUIRE(bound.out.pos.has_value());
+        CHECK(bound.out.pos->y == 2.5);
+    }
+    SECTION("a bad value is an error") {
+        BIND(Optionals, "port = \"80\"\nplain = 2", false, "error 1:8 port");
+    }
+    SECTION("unknown and duplicate keys still warn") {
+        BIND(Optionals, "port = 80\nport = 81\nplain = 2\nextra = 1", true, "warning 2:8 port", "warning 4:9 extra");
+        CHECK(bound.out.port == 81);
+    }
+    SECTION("an optional struct follows the struct rules inside") {
+        BIND(Optionals, "pos = { x = \"oops\", y = 2.5 }\nplain = 2", false, "error 1:13 pos.x");
+    }
+    SECTION("an absent key inside an optional struct still warns") {
+        BIND(Optionals, "pos = { x = 1.5 }\nplain = 2", true, "warning 0:0 pos.y");
+        REQUIRE(bound.out.pos.has_value());
+        CHECK(bound.out.pos->y == 0.5);
     }
 }
 

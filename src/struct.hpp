@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -21,6 +22,18 @@
 namespace cord {
 
 /**
+ * @brief What happens when a member's key is absent from the config.
+ *
+ * In every case the member keeps its initializer, the config just has nothing to put there.
+ */
+enum class Presence {
+    Plain,      ///< Warns.
+    Optional,   ///< Silent: a std::optional member, absent means empty.
+    // Required,
+    // Defaulted,
+};
+
+/**
  * @brief One key of a struct, with its member's type hidden so all keys fit in one vector.
  */
 template <class T>
@@ -31,6 +44,7 @@ struct MemberBase {
     virtual bool read(const Node& node, T& out, Context& ctx) const = 0;
 
     std::string key;
+    Presence presence = Presence::Plain;
 };
 
 /**
@@ -44,6 +58,10 @@ struct Member : MemberBase<T> {
 
     M T::* field = nullptr;
 };
+
+/** @brief Whether T is a std::optional. The standard library has no trait for it. */
+template <class T> inline constexpr bool is_optional = false;
+template <class T> inline constexpr bool is_optional<std::optional<T>> = true;
 
 /**
  * @brief The keys of a struct, filled by the user's `describe(cord::Struct<T>&)`.
@@ -70,6 +88,8 @@ public:
             auto member = std::make_unique<Member<T, M>>();
             member->key = key;
             member->field = field;
+            if constexpr (is_optional<M>)
+                member->presence = Presence::Optional;
             _members.push_back(std::move(member));
         }
     }
@@ -77,7 +97,8 @@ public:
     /**
      * @brief Fills out from an object's entries, reporting problems to the context.
      *
-     * An absent key warns and keeps the member's initializer. An unknown key warns and is skipped.
+     * An absent key keeps the member's initializer, and warns unless the member is a std::optional.
+     * An unknown key warns and is skipped.
      * For a duplicate key the last one wins, and each repeat warns.
      *
      * @return false if a value could not be converted. The others are still read and reported.
@@ -90,8 +111,12 @@ public:
             const Entry* last = _findLast(object, member->key);
 
             ctx.pushKey(member->key);
-            if (last == nullptr) ctx.warning("Absent key, keeping its default");
-            else if (!member->read(last->value, out, ctx)) ok = false;
+            if (last == nullptr) {
+                if (member->presence != Presence::Optional)
+                    ctx.warning("Absent key, keeping its default");
+            }
+            else if
+                (!member->read(last->value, out, ctx)) ok = false;
             ctx.popPath();
         }
         return ok;

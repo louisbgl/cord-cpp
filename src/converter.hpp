@@ -9,6 +9,7 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <optional>
 
 #include "context.hpp"
 #include "node.hpp"
@@ -140,6 +141,19 @@ struct Converter<std::vector<T>> {
             ctx.popPath();
         }
         return ok;
+    }
+};
+
+template <Convertible T>
+struct Converter<std::optional<T>> {
+    static bool read(const Node& node, std::optional<T>& out, Context& ctx) {
+        T element{};
+        if (!Converter<T>::read(node, element, ctx)) {
+            out = std::nullopt;
+            return false;
+        }
+        out = std::move(element);
+        return true;
     }
 };
 
