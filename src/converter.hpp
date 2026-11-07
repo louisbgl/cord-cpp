@@ -2,9 +2,13 @@
 
 #include <charconv>
 #include <concepts>
+#include <cstddef>
 #include <string>
 #include <system_error>
+#include <type_traits>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "context.hpp"
 #include "node.hpp"
@@ -116,6 +120,26 @@ struct Converter<T> {
             return s;
         }();
         return description.read(*object, out, ctx);
+    }
+};
+
+template <Convertible T>
+struct Converter<std::vector<T>> {
+    static bool read(const Node& node, std::vector<T>& out, Context& ctx) {
+        const auto* array = std::get_if<Array>(&node.value);
+        if (!array) { ctx.error(node, "Expected an array"); return false; }
+        
+        bool ok = true;
+        out.clear();
+        out.reserve(array->size());
+        for (std::size_t i = 0; i < array->size(); i++) {
+            ctx.pushIndex(i);
+            T element{};
+            if (!Converter<T>::read(array->at(i), element, ctx)) ok = false;
+            else out.push_back(std::move(element));
+            ctx.popPath();
+        }
+        return ok;
     }
 };
 

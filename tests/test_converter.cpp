@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "context.hpp"
 #include "converter.hpp"
@@ -319,4 +320,125 @@ TEST_CASE("Errors carry the current path", "[converter][path]") {
     CHECK_FALSE(Converter<int>::read(node, out, ctx));
     REQUIRE(ctx.diagnostics().size() == 1);
     CHECK(ctx.diagnostics()[0].path == "server.port");
+}
+
+/**
+ * @brief Each diagnostic as `1:9 [1]`, in the order they were reported.
+ */
+std::vector<std::string> errorsOf(const Context& ctx) {
+    std::vector<std::string> lines;
+    for (const cord::Diagnostic& diagnostic : ctx.diagnostics()) {
+        lines.push_back(std::to_string(diagnostic.line) + ":" + std::to_string(diagnostic.column) + " " + diagnostic.path);
+    }
+    return lines;
+}
+
+/** The literal is refused, with exactly these errors (`line:column path`), in this order. */
+#define CHECK_ERRORS(T, literal, ...)                                       \
+    do {                                                                    \
+        const Node node = parseValue(literal);                              \
+        Context ctx;                                                        \
+        T out{};                                                            \
+        const bool ok = Converter<T>::read(node, out, ctx);                 \
+        INFO(trace(literal, ctx));                                          \
+        CHECK_FALSE(ok);                                                    \
+        CHECK(errorsOf(ctx) == std::vector<std::string>{__VA_ARGS__});      \
+        for (const cord::Diagnostic& diagnostic : ctx.diagnostics())        \
+            CHECK(diagnostic.severity == cord::Severity::Error);            \
+    } while (false)
+
+TEST_CASE("Which vectors can be converted", "[converter][vector]") {
+    STATIC_CHECK(cord::Convertible<std::vector<int>>);
+    STATIC_CHECK(cord::Convertible<std::vector<bool>>);
+    STATIC_CHECK(cord::Convertible<std::vector<double>>);
+    STATIC_CHECK(cord::Convertible<std::vector<std::string>>);
+    STATIC_CHECK(cord::Convertible<std::vector<std::vector<int>>>);
+
+    STATIC_CHECK_FALSE(cord::Convertible<std::vector<char>>);
+    STATIC_CHECK_FALSE(cord::Convertible<std::vector<const char*>>);
+    STATIC_CHECK_FALSE(cord::Convertible<std::vector<std::map<std::string, int>>>);
+}
+
+TEST_CASE("Vectors", "[converter][vector]") {
+    SECTION("accepted") {
+        CHECK_READS(std::vector<int>, "[1, 2, 3]", (std::vector<int>{1, 2, 3}));
+        CHECK_READS(std::vector<std::string>, R"(["a", "b\nc"])", (std::vector<std::string>{"a", "b\nc"}));
+        CHECK_READS(std::vector<double>, "[1.5, -0.75]", (std::vector<double>{1.5, -0.75}));
+    }
+    SECTION("empty") {
+        CHECK_READS(std::vector<int>, "[]", std::vector<int>{});
+    }
+    SECTION("bools, which std::vector stores as bits") {
+        CHECK_READS(std::vector<bool>, "[true, false, true]", (std::vector<bool>{true, false, true}));
+    }
+    SECTION("each element goes through its own converter") {
+        CHECK_READS(std::vector<double>, "[1, 2.5]", (std::vector<double>{1.0, 2.5}));
+    }
+    SECTION("a trailing comma is not an element") {
+        CHECK_READS(std::vector<int>, "[1, 2,]", (std::vector<int>{1, 2}));
+    }
+    SECTION("nested") {
+        CHECK_READS(std::vector<std::vector<int>>, "[[1, 2], [], [3]]",
+            (std::vector<std::vector<int>>{{1, 2}, {}, {3}}));
+    }
+    SECTION("over several lines") {
+        CHECK_READS(std::vector<int>, "[\n  1,\n  2,\n]", (std::vector<int>{1, 2}));
+    }
+}
+
+TEST_CASE("A vector replaces what was there", "[converter][vector]") {
+    const auto readInto = [](std::vector<int> out, std::string_view literal) {
+        const Node node = parseValue(literal);
+        Context ctx;
+        REQUIRE(Converter<std::vector<int>>::read(node, out, ctx));
+        return out;
+    };
+
+    SECTION("a shorter array does not keep the extra old elements") {
+        CHECK(readInto({9, 9, 9, 9}, "[1, 2]") == std::vector<int>{1, 2});
+    }
+    SECTION("a longer array does not keep the old ones in front") {
+        CHECK(readInto({9}, "[1, 2, 3]") == std::vector<int>{1, 2, 3});
+    }
+    SECTION("an empty array empties it") {
+        CHECK(readInto({9, 9}, "[]").empty());
+    }
+}
+
+TEST_CASE("Rejected vectors", "[converter][vector]") {
+    SECTION("anything but an array is refused at the value") {
+        CHECK_REJECTS(std::vector<int>, "1");
+        CHECK_REJECTS(std::vector<int>, R"("[1, 2]")");
+        CHECK_REJECTS(std::vector<int>, "{}");
+        CHECK_REJECTS(std::vector<int>, "{ a = 1 }");
+    }
+    SECTION("a bad element is reported at itself, with its index") {
+        CHECK_ERRORS(std::vector<int>, R"([1, "x", 3])", "1:9 [1]");
+        CHECK_ERRORS(std::vector<std::uint8_t>, "[1, 256]", "1:9 [1]");
+        CHECK_ERRORS(std::vector<bool>, "[true, 1]", "1:12 [1]");
+    }
+    SECTION("each bad element is its own error") {
+        CHECK_ERRORS(std::vector<int>, R"(["x", 2, "y"])", "1:6 [0]", "1:14 [2]");
+        CHECK_ERRORS(std::vector<int>, "[true, false, true]", "1:6 [0]", "1:12 [1]", "1:19 [2]");
+    }
+    SECTION("nested indexes stack up") {
+        CHECK_ERRORS(std::vector<std::vector<int>>, R"([[1], [2, "x"]])", "1:15 [1][1]");
+        CHECK_ERRORS(std::vector<std::vector<int>>, "[[1], 2]", "1:11 [1]");
+    }
+}
+
+TEST_CASE("Vector paths", "[converter][vector][path]") {
+    const Node node = parseValue(R"([1, "x"])");
+    Context ctx;
+    ctx.pushKey("tags");
+    std::vector<int> out;
+    CHECK_FALSE(Converter<std::vector<int>>::read(node, out, ctx));
+
+    SECTION("the index follows the key") {
+        REQUIRE(ctx.diagnostics().size() == 1);
+        CHECK(ctx.diagnostics()[0].path == "tags[1]");
+    }
+    SECTION("the path is left as it was found") {
+        CHECK(ctx.path() == "tags");
+    }
 }

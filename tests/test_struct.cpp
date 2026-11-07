@@ -58,6 +58,14 @@ void describe(Struct<Pos>& s) {
     s.add("y", &Pos::y);
 }
 
+struct Route {
+    std::vector<Pos> points;
+};
+
+void describe(Struct<Route>& s) {
+    s.add("points", &Route::points);
+}
+
 struct Player {
     std::string name = "nobody";
     Pos pos;
@@ -336,6 +344,33 @@ TEST_CASE("A struct member needs an object", "[struct][nested]") {
     SECTION("nothing inside it gets reported") {
         BIND(Player, "name = \"bob\"\npos = \"nope\"\nhp = 5", false, "error 2:7 pos");
         CHECK(bound.out.hp == 5);
+    }
+}
+
+TEST_CASE("Vectors of structs", "[struct][nested][vector]") {
+    SECTION("each element is read as a struct") {
+        BIND(Route, "points = [{ x = 1.5, y = 2.5 }, { x = 3.5, y = 4.5 }]", true);
+        REQUIRE(bound.out.points.size() == 2);
+        CHECK(bound.out.points[0].y == 2.5);
+        CHECK(bound.out.points[1].x == 3.5);
+    }
+    SECTION("an empty array") {
+        BIND(Route, "points = []", true);
+        CHECK(bound.out.points.empty());
+    }
+    SECTION("a bad inner value has the index in its path") {
+        BIND(Route, "points = [{ x = 1.5, y = 2.5 }, { x = \"oops\", y = 1.5 }]", false, "error 1:39 points[1].x");
+    }
+    SECTION("an absent inner key warns with the index in its path") {
+        BIND(Route, "points = [{ x = 1.5 }]", true, "warning 0:0 points[0].y");
+        REQUIRE(bound.out.points.size() == 1);
+        CHECK(bound.out.points[0].y == 0.5);
+    }
+    SECTION("an unknown inner key warns with the index in its path") {
+        BIND(Route, "points = [{ x = 1.5, y = 2.5, z = 1 }]", true, "warning 1:35 points[0].z");
+    }
+    SECTION("an element that is not an object") {
+        BIND(Route, "points = [1]", false, "error 1:11 points[0]");
     }
 }
 
