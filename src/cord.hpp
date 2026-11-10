@@ -50,34 +50,34 @@ struct Result {
         return false;
     }
 
-    /** @brief Prints the errors to std::cout, one per line, stopping after max_printed. */
-    void printErrors(std::size_t max_printed = SIZE_MAX) const {
+    /** @brief Prints the errors to out (std::cerr by default), one per line, stopping after max_printed. */
+    void printErrors(std::ostream& out = std::cerr, std::size_t max_printed = SIZE_MAX) const {
         std::size_t printed = 0;
         for (const Diagnostic& d : diagnostics) {
             if (printed == max_printed) return;
             if (d.severity != Severity::Error) continue;
-            std::cout << d << "\n";
+            out << d << "\n";
             printed++;
         }
     }
 
-    /** @brief Prints the warnings to std::cout, one per line, stopping after max_printed. */
-    void printWarnings(std::size_t max_printed = SIZE_MAX) const {
+    /** @brief Prints the warnings to out (std::cerr by default), one per line, stopping after max_printed. */
+    void printWarnings(std::ostream& out = std::cerr, std::size_t max_printed = SIZE_MAX) const {
         std::size_t printed = 0;
         for (const Diagnostic& d : diagnostics) {
             if (printed == max_printed) return;
             if (d.severity != Severity::Warning) continue;
-            std::cout << d << "\n";
+            out << d << "\n";
             printed++;
         }
     }
 
-    /** @brief Prints every diagnostic to std::cout in order, one per line, stopping after max_printed. */
-    void printDiagnostics(std::size_t max_printed = SIZE_MAX) const {
+    /** @brief Prints every diagnostic to out (std::cerr by default), in order, one per line, stopping after max_printed. */
+    void printDiagnostics(std::ostream& out = std::cerr, std::size_t max_printed = SIZE_MAX) const {
         std::size_t printed = 0;
         for (const Diagnostic& d : diagnostics) {
             if (printed == max_printed) return;
-            std::cout << d << "\n";
+            out << d << "\n";
             printed++;
         }
     }
