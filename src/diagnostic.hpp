@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <ostream>
 #include <string>
 
 namespace cord {
@@ -34,6 +35,11 @@ inline std::string toString(const Diagnostic& diagnostic) {
     if (diagnostic.line != 0) text += " " + std::to_string(diagnostic.line) + ":" + std::to_string(diagnostic.column);
     if (!diagnostic.path.empty()) text += " [" + diagnostic.path + "]";
     return text + ": " + diagnostic.message;
+}
+
+/** @brief Writes the diagnostic as toString() formats it. */
+inline std::ostream& operator<<(std::ostream& stream, const Diagnostic& diagnostic) {
+    return stream << toString(diagnostic);
 }
 
 } // namespace cord

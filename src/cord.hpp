@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -21,22 +24,6 @@ struct Result {
     std::optional<T> value;               ///< Empty if any error was found.
     std::vector<Diagnostic> diagnostics;  ///< Errors and warnings, in the order they were found.
 
-    /** @brief Whether the config is invalid. Then value is empty. */
-    bool hasErrors() const {
-        for (const auto& d : diagnostics) {
-            if (d.severity == Severity::Error) return true;
-        }
-        return false;
-    }
-
-    /** @brief Whether something is worth a look, even though the value may be usable. */
-    bool hasWarnings() const {
-        for (const auto& d : diagnostics) {
-            if (d.severity == Severity::Warning) return true;
-        }
-        return false;
-    }
-
     /**
      * @brief Copies the value into out.
      * @return false if there is no value, leaving out untouched.
@@ -45,6 +32,54 @@ struct Result {
         if (!value.has_value()) return false;
         out = *value;
         return true;
+    }
+
+    /** @brief Whether the config is invalid. Then value is empty. */
+    [[nodiscard]] bool hasErrors() const {
+        for (const auto& d : diagnostics) {
+            if (d.severity == Severity::Error) return true;
+        }
+        return false;
+    }
+
+    /** @brief Whether something is worth a look, even though the value may be usable. */
+    [[nodiscard]] bool hasWarnings() const {
+        for (const auto& d : diagnostics) {
+            if (d.severity == Severity::Warning) return true;
+        }
+        return false;
+    }
+
+    /** @brief Prints the errors to std::cout, one per line, stopping after max_printed. */
+    void printErrors(std::size_t max_printed = SIZE_MAX) const {
+        std::size_t printed = 0;
+        for (const Diagnostic& d : diagnostics) {
+            if (printed == max_printed) return;
+            if (d.severity != Severity::Error) continue;
+            std::cout << d << "\n";
+            printed++;
+        }
+    }
+
+    /** @brief Prints the warnings to std::cout, one per line, stopping after max_printed. */
+    void printWarnings(std::size_t max_printed = SIZE_MAX) const {
+        std::size_t printed = 0;
+        for (const Diagnostic& d : diagnostics) {
+            if (printed == max_printed) return;
+            if (d.severity != Severity::Warning) continue;
+            std::cout << d << "\n";
+            printed++;
+        }
+    }
+
+    /** @brief Prints every diagnostic to std::cout in order, one per line, stopping after max_printed. */
+    void printDiagnostics(std::size_t max_printed = SIZE_MAX) const {
+        std::size_t printed = 0;
+        for (const Diagnostic& d : diagnostics) {
+            if (printed == max_printed) return;
+            std::cout << d << "\n";
+            printed++;
+        }
     }
 };
 
