@@ -19,9 +19,9 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "struct.hpp"
+#include "cord.hpp"
 #include "test_helpers.hpp"
 
-namespace {
 
 struct Server {
     std::string name = "default";
@@ -43,6 +43,12 @@ struct TestOptional {
     std::optional<std::string> opt = std::nullopt;
 };
 
+struct BigTest {
+    Meta meta{};
+    TestVec vec{};
+    std::optional<std::string> opt = std::nullopt;
+};
+
 void describe(cord::Struct<Server>& s) {
     s.add("name", &Server::name);
     s.add("port", &Server::port);
@@ -61,6 +67,12 @@ void describe(cord::Struct<TestVec>& s) {
 
 void describe(cord::Struct<TestOptional>& s) {
     s.add("opt", &TestOptional::opt);
+}
+
+void describe(cord::Struct<BigTest>& s) {
+    s.add("meta", &BigTest::meta);
+    s.add("vec", &BigTest::vec);
+    s.add("opt", &BigTest::opt);
 }
 
 void printValue(const Server& server) {
@@ -88,6 +100,33 @@ void printValue(const TestOptional& opt) {
         std::cout << "TestOptional: '" << opt.opt.value() << "'\n";
     else
         std::cout << "TestOptional: nullopt\n";
+}
+
+/**
+ * @brief Prints the whole BigTest as an indented tree, one value per line.
+ */
+void printValue(const BigTest& test) {
+    const Server& server = test.meta.server;
+    const std::vector<bool>& booleans = test.vec.booleans;
+
+    std::cout << std::boolalpha
+              << "BigTest\n"
+              << "  meta\n"
+              << "    server\n"
+              << "      name    = \"" << server.name << "\"\n"
+              << "      port    = " << server.port << "\n"
+              << "      ratio   = " << server.ratio << "\n"
+              << "      verbose = " << server.verbose << "\n"
+              << "    something = " << test.meta.something << "\n"
+              << "  vec\n"
+              << "    booleans  = [";
+    for (std::size_t i = 0; i < booleans.size(); i++) {
+        std::cout << (i > 0 ? ", " : "") << booleans[i];
+    }
+    std::cout << "]  (" << booleans.size() << " elements)\n"
+              << "  opt         = ";
+    if (test.opt) std::cout << "\"" << *test.opt << "\"\n";
+    else std::cout << "(empty)\n";
 }
 
 constexpr std::string_view source = R"(name = "cord"
@@ -200,9 +239,36 @@ void scratch() {
 
     tryStruct<TestOptional>("opt = \"this sting is optional\"");
     tryStruct<TestOptional>("# empty source");
+    std::cout << "\n================\n\n";
+
+    auto result = cord::parse<BigTest>("# BigTest example\n"
+"meta = {\n"
+"   server = {\n"
+"       name = \"What is your name???\",\n"
+"       port = 6767,\n"
+"       verbose = true,\n"
+"   },\n"
+"   something = false\n"
+"}\n"
+"vec = { booleans = [true, false] }\n"
+"opt = \"This is an optional string\"\n"
+);
+    if (result.hasErrors()) {
+        std::cout << "Parsing BigTest config failed, errors were found:\n";
+        result.printDiagnostics();
+    }
+    else {
+        if (result.hasWarnings()) {
+            std::cout << "Parsing BigTest config succeeded, warnings were found:\n";
+            result.printWarnings();
+        }
+
+        BigTest test{};
+        result.get(test);
+        printValue(test);
+    }
 }
 
-} // namespace
 
 int main(int argc, char** argv) {
     std::string text{source};
