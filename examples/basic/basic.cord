@@ -1,0 +1,6 @@
+port = 4444
+log_path= "path/to/somewhere"
+
+
+# this is a comment
+verbose=true

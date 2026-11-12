@@ -21,6 +21,11 @@ else()
 endif()
 
 option(CORD_BUILD_TESTS "Build tests" ${CORD_DEFAULT_BUILD_TESTS})
+option(CORD_BUILD_EXAMPLES "Build examples" ${CORD_DEFAULT_BUILD_TESTS})
+
+if(CORD_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 option(CORD_COVERAGE "Enable coverage reporting" OFF)
 
