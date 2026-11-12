@@ -2,8 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -114,6 +117,27 @@ Result<T> parse(std::string_view source) {
         result.value = std::move(out);
         return result;
     }
+}
+
+/**
+ * @brief Reads the file at path and parses it like parse<T>.
+ *
+ * A file that cannot be opened is reported as an error diagnostic, like any other invalid config.
+ * parse<T> checks that T is describable, so a bad T gets the same compile error here.
+ */
+template <class T>
+Result<T> parseFile(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return Result<T>{
+            .value = std::nullopt,
+            .diagnostics = {Diagnostic{Severity::Error, 0, 0, "", "Could not open " + path}},
+        };
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return parse<T>(buffer.str());
 }
 
 } // namespace cord
